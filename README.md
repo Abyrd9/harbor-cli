@@ -9,7 +9,7 @@ A CLI tool for those small side projects that only run a few services. Harbor al
 ## Installation
 
 ```bash
-npm i -g harbor-cli
+npm i -g @abyrd9/harbor-cli
 ```
 
 ## Prerequisites
