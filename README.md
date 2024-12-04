@@ -1,15 +1,15 @@
 # Harbor CLI
 
-A simple CLI tool for those small side projects that run a few services. Harbor was created to make it a little easier/cleaner to run these services locally. It does this in a few simple steps:
+A CLI tool for those small side projects that only run a few services. Harbor allows you to:
 
-1. 🛠️ Adds a configuration file describing your services
-2. 🔄 Updates/creates/runs caddy to serve the services under a subdomain
-3. 🚀 Launches your services in a tmux session
+1. 🛠️ Define your services in a configuration file
+2. 🔄 Generate a Caddyfile to reverse proxy certain services to subdomains
+3. 🚀 Launch your services in a tmux session with Caddy and your services automatically proxied
 
 ## Installation
 
 ```bash
-go install github.com/Abyrd9/harbor@latest
+npm i -g harbor-cli
 ```
 
 ## Prerequisites
@@ -24,17 +24,17 @@ Before using Harbor, make sure you have the following installed:
 
 1. Initialize your development environment:
 ```bash
-harbor anchor
+harbor dock
 ```
 
 2. Add new services to your configuration:
 ```bash
-harbor dock
+harbor moor
 ```
 
 3. Update your Caddyfile:
 ```bash
-harbor moor
+harbor anchor
 ```
 
 4. Launch your services:
@@ -67,10 +67,17 @@ Contains your service configurations that are used to generate the Caddyfile and
       "command": "go run .",
       "port": 8080,
       "subdomain": "api"
+    },
+    {
+      "name": "dashboard",
+      "path": "./vite-frontend",
+      "command": "npx drizzle-kit studio",
     }
   ]
 }
 ```
+
+> Note: The dashboard service is a bit special. This is a drizzle studio instance to view your database. There's no subdomain value and no port declared because it typically runs at `local.drizzle.studio`. This will still be running and viewable in your tmux session, but it won't be automatically proxied.
 
 ### Caddyfile
 
@@ -88,9 +95,9 @@ app.localhost {
 
 ## Commands
 
-- `harbor anchor`: Generate a new harbor.json file
-- `harbor dock`: Add new services to your harbor.json file
-- `harbor moor`: Update your Caddyfile from the current harbor.json file
+- `harbor dock`: Generate a new harbor.json file
+- `harbor moor`: Add new services to your harbor.json file
+- `harbor anchor`: Update your Caddyfile from the current harbor.json file
 - `harbor launch`: Start all services defined in your harbor.json file in a tmux session
 
 ## Terminal Multiplexer
