@@ -93,6 +93,8 @@ app.localhost {
 }
 ```
 
+> Note: Some services may be tricky with Caddy and getting HMR to work or whatever other problems. Feel free to tinker with the Caddyfile or the subdomain values in the harbor config file in order to get things running. Maybe in the future there will be examples for common cases.
+
 ## Commands
 
 - `harbor dock`: Generate a new harbor.json file
