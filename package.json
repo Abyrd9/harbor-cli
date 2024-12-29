@@ -11,6 +11,7 @@
     "scripts"
   ],
   "scripts": {
+    "check": "bunx npm-check -u",
     "build": "tsc",
     "prepare": "bun run build",
     "start": "node dist/index.js",
@@ -39,10 +40,10 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^11.1.0"
+    "@commander-js/extra-typings": "^12.1.0"
   },
   "devDependencies": {
-    "@types/node": "^20.10.5",
+    "@types/node": "^22.10.2",
     "bun-types": "latest",
     "typescript": "^5.3.3"
   },
