@@ -351,6 +351,18 @@ async function generateCaddyFile(): Promise<void> {
     const config = await readHarborConfig();
     let caddyfileContent = '';
 
+    // Check if any services need a Caddyfile
+    const needsCaddyfile = config.services.some(svc => svc.port && svc.subdomain);
+    
+    if (!needsCaddyfile) {
+      // If no services need a Caddyfile, remove it if it exists
+      if (fileExists('Caddyfile')) {
+        await fs.promises.unlink('Caddyfile');
+        console.log('Removed Caddyfile as no services require subdomains');
+      }
+      return;
+    }
+
     for (const svc of config.services) {
       if (!svc.port || !svc.subdomain) {
         continue;
@@ -384,8 +396,9 @@ async function runServices(): Promise<void> {
   }
 
   // Load and validate config
+  let config: Config;
   try {
-    const config = await readHarborConfig();
+    config = await readHarborConfig();
     const validationError = validateConfig(config);
     if (validationError) {
       console.log(`❌ Invalid harbor.json configuration: ${validationError}`);
@@ -396,17 +409,20 @@ async function runServices(): Promise<void> {
     process.exit(1);
   }
 
-  if (!fileExists('Caddyfile')) {
-    console.log('❌ No Caddyfile found');
-    console.log('\nTo initialize a new Harbor project, please use:');
+  // Check if any services need a Caddyfile
+  const needsCaddyfile = config.services.some(svc => svc.port && svc.subdomain);
+
+  if (needsCaddyfile && !fileExists('Caddyfile')) {
+    console.log('❌ No Caddyfile found, but some services require subdomains');
+    console.log('\nTo generate the Caddyfile:');
     console.log('  harbor anchor');
-    console.log('\nOr to generate just the Caddyfile:');
-    console.log('  harbor moor');
     process.exit(1);
   }
 
-  // Stop any existing Caddy process
-  await stopCaddy();
+  // Stop any existing Caddy process if we need it
+  if (needsCaddyfile) {
+    await stopCaddy();
+  }
 
   // Ensure scripts exist and are executable
   await ensureScriptsExist();
