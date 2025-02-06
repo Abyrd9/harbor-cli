@@ -14,8 +14,8 @@
     "check": "bunx npm-check -u",
     "build": "tsc",
     "prepare": "bun run build",
-    "start": "node dist/index.js",
-    "harbor": "node dist/index.js",
+    "start": "bun dist/index.js",
+    "harbor": "bun dist/index.js",
     "release": "bash release.sh"
   },
   "keywords": [
@@ -40,12 +40,30 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^12.1.0"
+    "@commander-js/extra-typings": "^13.1.0"
   },
   "devDependencies": {
-    "@types/node": "^22.10.2",
+    "@types/node": "^22.13.1",
     "bun-types": "latest",
-    "typescript": "^5.3.3"
+    "typescript": "^5.7.3"
   },
-  "main": "index.js"
+  "main": "index.js",
+  "harbor": {
+    "domain": "localhost",
+    "useSudo": false,
+    "services": [
+      {
+        "name": "vite-project",
+        "path": "test-services/vite-project",
+        "subdomain": "vite-project",
+        "command": "npm run dev"
+      },
+      {
+        "name": "go-api",
+        "path": "test-services/go-api",
+        "subdomain": "go-api",
+        "command": "go run ."
+      }
+    ]
+  }
 }

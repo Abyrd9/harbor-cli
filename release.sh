@@ -60,7 +60,7 @@ git commit --amend --no-edit
 
 # Publish
 echo -e "${GREEN}Publishing to npm...${NC}"
-npm publish
+bun publish
 
 # Push changes
 echo -e "${GREEN}Pushing changes to repository...${NC}"

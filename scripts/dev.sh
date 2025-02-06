@@ -6,6 +6,17 @@ if tmux has-session -t local-dev-test 2>/dev/null; then
     tmux kill-session -t local-dev-test
 fi
 
+# Function to get harbor config
+get_harbor_config() {
+    if [ -f "harbor.json" ]; then
+        cat harbor.json
+    elif [ -f "package.json" ]; then
+        jq '.harbor' package.json
+    else
+        echo "{}"
+    fi
+}
+
 # Start a new tmux session named 'local-dev-test' and rename the initial window
 tmux new-session -d -s local-dev-test
 
@@ -70,7 +81,7 @@ tmux rename-window -t local-dev-test:0 'Terminal'
 
 # Check if any services need Caddy
 needs_caddy=false
-jq -c '.services[]' harbor.json | while read service; do
+get_harbor_config | jq -c '.services[]' | while read service; do
     subdomain=$(echo $service | jq -r '.subdomain // empty')
     port=$(echo $service | jq -r '.port // empty')
     if [ ! -z "$subdomain" ] && [ ! -z "$port" ]; then
@@ -89,8 +100,8 @@ if [ "$needs_caddy" = true ]; then
     window_index=2  # Start services from index 2
 fi
 
-# Create windows dynamically based on harbor.json
-jq -c '.services[]' harbor.json | while read service; do
+# Create windows dynamically based on harbor config
+get_harbor_config | jq -c '.services[]' | while read service; do
     name=$(echo $service | jq -r '.name')
     path=$(echo $service | jq -r '.path')
     command=$(echo $service | jq -r '.command')

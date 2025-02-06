@@ -119,41 +119,61 @@ if (process.argv.length <= 2) {
 
 program.command('dock')
   .description(`Prepares your development environment by creating both:
-- harbor.json configuration file
-- Caddyfile for reverse proxy
+- harbor.json configuration file (or harbor field in package.json)
+- Caddyfile for reverse proxy (if needed)
 	
 This is typically the first command you'll run in a new project.`)
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
-    const caddyFileExists = fileExists('Caddyfile');
-    const configFileExists = fileExists('harbor.json');
+    try {
+      const caddyFileExists = fileExists('Caddyfile');
+      const configExists = checkHasHarborConfig();
 
-    if (caddyFileExists || configFileExists) {
-      console.log('❌ Error: Harbor project already initialized');
-      if (caddyFileExists) {
-        console.log('   - Caddyfile already exists');
+      if (caddyFileExists || configExists) {
+        console.log('❌ Error: Harbor project already initialized');
+        if (caddyFileExists) {
+          console.log('   - Caddyfile already exists');
+        }
+        if (configExists) {
+          console.log('   - Harbor configuration already exists');
+        }
+        console.log('\nTo reinitialize, please remove these files first.');
+        process.exit(1);
       }
-      if (configFileExists) {
-        console.log('   - harbor.json already exists');
+
+      const servicesAdded = await generateDevFile(options.path);
+      
+      // Only try to generate Caddyfile if services were actually added
+      if (servicesAdded) {
+        try {
+          await generateCaddyFile();
+          console.log('✨ Environment successfully prepared and anchored!');
+        } catch (err) {
+          if (err instanceof Error && err.message.includes('No harbor configuration found')) {
+            // This is expected if no services were added
+            console.log('✨ Environment prepared! No services configured yet.');
+          } else {
+            console.log('❌ Error generating Caddyfile:', err instanceof Error ? err.message : 'Unknown error');
+            process.exit(1);
+          }
+        }
+      } else {
+        console.log('✨ Environment prepared! No services configured yet.');
       }
-      console.log('\nTo reinitialize, please remove these files first.');
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
-
-    await generateDevFile(options.path);
-    await generateCaddyFile();
-
-    console.log('✨ Environment successfully prepared and anchored!');
   });
 
 program.command('moor')
-  .description('Add new services to your harbor.json configuration file')
+  .description('Add new services to your harbor configuration')
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
-    if (!fileExists('harbor.json')) {
-      console.log('❌ No harbor.json configuration found');
+    if (!checkHasHarborConfig()) {
+      console.log('❌ No harbor configuration found');
       console.log('\nTo initialize a new Harbor project, please use:');
-      console.log('  harbor anchor');
+      console.log('  harbor dock');
       process.exit(1);
     }
     
@@ -165,11 +185,11 @@ program.command('anchor')
 
 Note: This command will stop any active Caddy processes, including those from other Harbor projects.`)
   .action(async () => {
-    if (!fileExists('harbor.json')) {
-        console.log('❌ No harbor.json configuration found');
-        console.log('\nTo initialize a new Harbor project, please use:');
-        console.log('  harbor anchor');
-        process.exit(1);
+    if (!checkHasHarborConfig()) {
+      console.log('❌ No harbor configuration found');
+      console.log('\nTo initialize a new Harbor project, please use:');
+      console.log('  harbor dock');
+      process.exit(1);
     }
 
     await generateCaddyFile();
@@ -220,32 +240,66 @@ function validateConfig(config: Config): string | null {
   return null;
 }
 
-async function generateDevFile(dirPath: string): Promise<void> {
+async function generateDevFile(dirPath: string): Promise<boolean> {
   let config: Config;
+  let writeToPackageJson = false;
   
   try {
-    const existing = await fs.promises.readFile('harbor.json', 'utf-8');
-    config = JSON.parse(existing);
-    console.log('Found existing harbor.json, scanning for new services...');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
-      console.error('Error reading harbor.json:', err);
-      process.exit(1);
+    // First try to read from harbor.json
+    try {
+      const existing = await fs.promises.readFile('harbor.json', 'utf-8');
+      config = JSON.parse(existing);
+      console.log('Found existing harbor.json, scanning for new services...');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw new Error(`Error reading harbor.json: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+
+      // If harbor.json doesn't exist, try package.json
+      try {
+        const packageData = await fs.promises.readFile('package.json', 'utf-8');
+        const packageJson = JSON.parse(packageData);
+        
+        if (packageJson.harbor) {
+          config = packageJson.harbor;
+          writeToPackageJson = true;
+          console.log('Found existing harbor config in package.json, scanning for new services...');
+        } else if (fileExists('package.json')) {
+          // If package.json exists but no harbor config, use it
+          writeToPackageJson = true;
+          config = {
+            domain: 'localhost',
+            useSudo: false,
+            services: [],
+          };
+          console.log('Creating new harbor config in package.json...');
+        } else {
+          // No package.json, create harbor.json
+          config = {
+            domain: 'localhost',
+            useSudo: false,
+            services: [],
+          };
+          console.log('Creating new harbor.json...');
+        }
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+          throw new Error(`Error reading package.json: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        // No package.json, create harbor.json
+        config = {
+          domain: 'localhost',
+          useSudo: false,
+          services: [],
+        };
+        console.log('Creating new harbor.json...');
+      }
     }
-    // Initialize new config with defaults
-    config = {
-      domain: 'localhost',
-      useSudo: false,
-      services: [],
-    };
-    console.log('Creating new harbor.json...');
-  }
 
-  // Create a map of existing services for easy lookup
-  const existing = new Set(config.services.map(s => s.name));
-  let newServicesAdded = false;
+    // Create a map of existing services for easy lookup
+    const existing = new Set(config.services.map(s => s.name));
+    let newServicesAdded = false;
 
-  try {
     const folders = await fs.promises.readdir(dirPath, { withFileTypes: true });
     
     for (const folder of folders) {
@@ -280,46 +334,106 @@ async function generateDevFile(dirPath: string): Promise<void> {
 
     if (!newServicesAdded) {
       console.log('No new services found to add, feel free to add them manually');
-      return;
+      // Still write the initial config even if no services were found
+      const validationError = validateConfig(config);
+      if (validationError) {
+        throw new Error(`Invalid harbor configuration: ${validationError}`);
+      }
+
+      if (writeToPackageJson) {
+        // Update package.json
+        const packageData = await fs.promises.readFile('package.json', 'utf-8');
+        const packageJson = JSON.parse(packageData);
+        packageJson.harbor = config;
+        await fs.promises.writeFile(
+          'package.json',
+          JSON.stringify(packageJson, null, 2),
+          'utf-8'
+        );
+        console.log('\npackage.json updated successfully with harbor configuration');
+      } else {
+        // Write to harbor.json
+        await fs.promises.writeFile(
+          'harbor.json',
+          JSON.stringify(config, null, 2),
+          'utf-8'
+        );
+        console.log('\nharbor.json created successfully');
+      }
+      return false;
     }
 
     const validationError = validateConfig(config);
     if (validationError) {
-      console.log(`❌ Invalid harbor.json configuration: ${validationError}`);
-      process.exit(1);
+      throw new Error(`Invalid harbor configuration: ${validationError}`);
     }
 
-    await fs.promises.writeFile(
-      'harbor.json',
-      JSON.stringify(config, null, 2),
-      'utf-8'
-    );
+    if (writeToPackageJson) {
+      // Update package.json
+      const packageData = await fs.promises.readFile('package.json', 'utf-8');
+      const packageJson = JSON.parse(packageData);
+      packageJson.harbor = config;
+      await fs.promises.writeFile(
+        'package.json',
+        JSON.stringify(packageJson, null, 2),
+        'utf-8'
+      );
+      console.log('\npackage.json updated successfully with harbor configuration');
+    } else {
+      // Write to harbor.json
+      await fs.promises.writeFile(
+        'harbor.json',
+        JSON.stringify(config, null, 2),
+        'utf-8'
+      );
+      console.log('\nharbor.json created successfully');
+    }
 
-    console.log('\nharbor.json updated successfully');
     console.log('\nImportant:');
     console.log('  - Update the \'Port\' field for each service to match its actual port or leave blank to ignore in the Caddyfile');
     console.log('  - Verify the auto-detected commands are correct for your services');
+    return true;
   } catch (err) {
-    console.error('Error processing directory:', err);
-    process.exit(1);
+    throw new Error(`Error processing directory: ${err instanceof Error ? err.message : 'Unknown error'}`);
   }
 }
 
 async function readHarborConfig(): Promise<Config> {
+  // First try to read from harbor.json
   try {
     const data = await fs.promises.readFile('harbor.json', 'utf-8');
     const config = JSON.parse(data) as Config;
     const validationError = validateConfig(config);
     if (validationError) {
-      throw new Error(`Invalid configuration: ${validationError}`);
+      throw new Error(`Invalid configuration in harbor.json: ${validationError}`);
     }
     return config;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      throw new Error('harbor.json not found');
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw err;
     }
-    throw err;
   }
+
+  // If harbor.json doesn't exist, try package.json
+  try {
+    const packageData = await fs.promises.readFile('package.json', 'utf-8');
+    const packageJson = JSON.parse(packageData);
+    
+    if (packageJson.harbor) {
+      const config = packageJson.harbor as Config;
+      const validationError = validateConfig(config);
+      if (validationError) {
+        throw new Error(`Invalid configuration in package.json harbor field: ${validationError}`);
+      }
+      return config;
+    }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw err;
+    }
+  }
+
+  throw new Error('No harbor configuration found in harbor.json or package.json');
 }
 
 async function stopCaddy(): Promise<void> {
@@ -387,11 +501,12 @@ async function generateCaddyFile(): Promise<void> {
 }
 
 async function runServices(): Promise<void> {
-  // Check for required files
-  if (!fileExists('harbor.json')) {
-    console.log('❌ No harbor.json configuration found');
+  const hasHarborConfig = checkHasHarborConfig();
+
+  if (!hasHarborConfig) {
+    console.log('❌ No harbor configuration found');
     console.log('\nTo initialize a new Harbor project, please use:');
-    console.log('  harbor anchor');
+    console.log('  harbor dock');
     process.exit(1);
   }
 
@@ -490,6 +605,22 @@ async function ensureScriptsExist(): Promise<void> {
   } catch (err) {
     console.error('Error setting up dev.sh:', err);
     throw err;
+  }
+}
+
+function checkHasHarborConfig(): boolean {
+  // Check for harbor.json
+  if (fileExists('harbor.json')) {
+    return true;
+  }
+
+  // Check for harbor config in package.json
+  try {
+    const packageData = fs.readFileSync(`${process.cwd()}/package.json`, 'utf-8');
+    const packageJson = JSON.parse(packageData);
+    return !!packageJson.harbor;
+  } catch {
+    return false;
   }
 }
 
