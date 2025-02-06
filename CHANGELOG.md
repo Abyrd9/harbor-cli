@@ -10,3 +10,8 @@ Updating note in readme about some services being difficult for Caddy and HMR
 
 Caddyfile is now not required if no subdomain exists in the configuration file
 
+
+## v0.1.0 - 2025-02-05
+
+Adding support to put configuration into package.json if it exists rather than defaulting to creating harbor.json
+
