@@ -15,3 +15,8 @@ Caddyfile is now not required if no subdomain exists in the configuration file
 
 Adding support to put configuration into package.json if it exists rather than defaulting to creating harbor.json
 
+
+## v0.1.1 - 2025-03-21
+
+Fixing useSudo and caddy tab
+
