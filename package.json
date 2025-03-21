@@ -50,19 +50,21 @@
   "main": "index.js",
   "harbor": {
     "domain": "localhost",
-    "useSudo": false,
+    "useSudo": true,
     "services": [
       {
         "name": "vite-project",
         "path": "test-services/vite-project",
         "subdomain": "vite-project",
-        "command": "npm run dev"
+        "command": "npm run dev",
+        "port": 5173
       },
       {
         "name": "go-api",
         "path": "test-services/go-api",
         "subdomain": "go-api",
-        "command": "go run ."
+        "command": "go run .",
+        "port": 8080
       }
     ]
   }

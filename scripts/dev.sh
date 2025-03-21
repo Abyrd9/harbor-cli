@@ -81,14 +81,12 @@ tmux rename-window -t local-dev-test:0 'Terminal'
 
 # Check if any services need Caddy
 needs_caddy=false
-get_harbor_config | jq -c '.services[]' | while read service; do
-    subdomain=$(echo $service | jq -r '.subdomain // empty')
-    port=$(echo $service | jq -r '.port // empty')
-    if [ ! -z "$subdomain" ] && [ ! -z "$port" ]; then
-        needs_caddy=true
-        break
-    fi
-done
+echo "Checking for services that need Caddy..."
+if get_harbor_config | jq -e '.services[] | select(.subdomain != null and .port != null) | true' > /dev/null; then
+    needs_caddy=true
+    echo "Found services that need Caddy"
+fi
+echo "needs_caddy value: $needs_caddy"
 
 window_index=1  # Start from index 1
 
@@ -96,7 +94,18 @@ window_index=1  # Start from index 1
 if [ "$needs_caddy" = true ]; then
     echo "Creating window for Caddy"
     tmux new-window -t local-dev-test:1 -n 'Caddy'
-    tmux send-keys -t local-dev-test:1 'caddy run' C-m
+    
+    # Check if useSudo is true in harbor config
+    use_sudo=$(get_harbor_config | jq -r '.useSudo // false')
+    echo "useSudo value: $use_sudo"
+    if [ "$use_sudo" = "true" ]; then
+        echo "Running Caddy with sudo"
+        tmux send-keys -t local-dev-test:1 'sudo caddy run' C-m
+    else
+        echo "Running Caddy without sudo"
+        tmux send-keys -t local-dev-test:1 'caddy run' C-m
+    fi
+    
     window_index=2  # Start services from index 2
 fi
 
