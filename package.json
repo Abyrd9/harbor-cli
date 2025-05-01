@@ -1,7 +1,7 @@
 {
   "name": "@abyrd9/harbor-cli",
   "version": "0.1.1",
-  "description": "A CLI tool for managing local development services with automatic subdomain routing",
+  "description": "A CLI tool for managing simple local development services with tmux sessions",
   "type": "module",
   "bin": {
     "harbor": "dist/index.js"
@@ -21,8 +21,6 @@
   "keywords": [
     "cli",
     "development",
-    "proxy",
-    "caddy",
     "tmux",
     "local-development"
   ],
@@ -49,22 +47,16 @@
   },
   "main": "index.js",
   "harbor": {
-    "domain": "localhost",
-    "useSudo": true,
     "services": [
       {
         "name": "vite-project",
         "path": "test-services/vite-project",
-        "subdomain": "vite-project",
-        "command": "npm run dev",
-        "port": 5173
+        "command": "npm run dev"
       },
       {
         "name": "go-api",
         "path": "test-services/go-api",
-        "subdomain": "go-api",
-        "command": "go run .",
-        "port": 8080
+        "command": "go run ."
       }
     ]
   }

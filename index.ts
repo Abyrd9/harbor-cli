@@ -22,12 +22,6 @@ interface Dependency {
 
 const requiredDependencies: Dependency[] = [
   {
-    name: 'Caddy',
-    command: 'caddy version',
-    installMsg: 'https://caddyserver.com/docs/install',
-    requiredFor: 'reverse proxy functionality',
-  },
-  {
     name: 'tmux',
     command: 'tmux -V',
     installMsg: 'https://github.com/tmux/tmux/wiki/Installing',
@@ -71,14 +65,10 @@ async function checkDependencies(): Promise<void> {
 type DevService = {
   name: string;
   path: string;
-  subdomain?: string;
   command?: string;
-  port?: number;
 }
 
 type Config = {
-  domain: string;
-  useSudo: boolean;
   services: DevService[];
 }
 
@@ -100,13 +90,11 @@ program
   .description(`A CLI tool for managing your project's local development services
 
 Harbor helps you manage multiple local development services with ease.
-It provides a simple way to configure and run your services with automatic
-subdomain routing through Caddy reverse proxy.
+It provides a simple way to configure and run your services in tmux sessions.
 
 Available Commands:
   dock      Initialize a new Harbor project
   moor      Add new services to your configuration
-  anchor    Generate Caddy reverse proxy configuration
   launch    Start all services in tmux sessions`)
   .version(packageJson.version)
   .action(async () => await checkDependencies())
@@ -118,48 +106,24 @@ if (process.argv.length <= 2) {
 }
 
 program.command('dock')
-  .description(`Prepares your development environment by creating both:
+  .description(`Prepares your development environment by creating a harbor configuration file
 - harbor.json configuration file (or harbor field in package.json)
-- Caddyfile for reverse proxy (if needed)
 	
 This is typically the first command you'll run in a new project.`)
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
     try {
-      const caddyFileExists = fileExists('Caddyfile');
       const configExists = checkHasHarborConfig();
 
-      if (caddyFileExists || configExists) {
+      if (configExists) {
         console.log('❌ Error: Harbor project already initialized');
-        if (caddyFileExists) {
-          console.log('   - Caddyfile already exists');
-        }
-        if (configExists) {
-          console.log('   - Harbor configuration already exists');
-        }
-        console.log('\nTo reinitialize, please remove these files first.');
+        console.log('   - Harbor configuration already exists');
+        console.log('\nTo reinitialize, please remove the configuration first.');
         process.exit(1);
       }
 
-      const servicesAdded = await generateDevFile(options.path);
-      
-      // Only try to generate Caddyfile if services were actually added
-      if (servicesAdded) {
-        try {
-          await generateCaddyFile();
-          console.log('✨ Environment successfully prepared and anchored!');
-        } catch (err) {
-          if (err instanceof Error && err.message.includes('No harbor configuration found')) {
-            // This is expected if no services were added
-            console.log('✨ Environment prepared! No services configured yet.');
-          } else {
-            console.log('❌ Error generating Caddyfile:', err instanceof Error ? err.message : 'Unknown error');
-            process.exit(1);
-          }
-        }
-      } else {
-        console.log('✨ Environment prepared! No services configured yet.');
-      }
+      await generateDevFile(options.path);
+      console.log('✨ Environment prepared!');
     } catch (err) {
       console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
@@ -178,21 +142,6 @@ program.command('moor')
     }
     
     await generateDevFile(options.path);
-  });
-
-program.command('anchor')
-  .description(`Add new services to your Caddyfile
-
-Note: This command will stop any active Caddy processes, including those from other Harbor projects.`)
-  .action(async () => {
-    if (!checkHasHarborConfig()) {
-      console.log('❌ No harbor configuration found');
-      console.log('\nTo initialize a new Harbor project, please use:');
-      console.log('  harbor dock');
-      process.exit(1);
-    }
-
-    await generateCaddyFile();
   });
 
 program.command('launch')
@@ -220,10 +169,6 @@ function isProjectDirectory(dirPath: string): boolean {
 }
 
 function validateConfig(config: Config): string | null {
-  if (!config.domain) {
-    return 'Domain is required';
-  }
-
   if (!Array.isArray(config.services)) {
     return 'Services must be an array';
   }
@@ -268,16 +213,12 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
           // If package.json exists but no harbor config, use it
           writeToPackageJson = true;
           config = {
-            domain: 'localhost',
-            useSudo: false,
             services: [],
           };
           console.log('Creating new harbor config in package.json...');
         } else {
           // No package.json, create harbor.json
           config = {
-            domain: 'localhost',
-            useSudo: false,
             services: [],
           };
           console.log('Creating new harbor.json...');
@@ -288,8 +229,6 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         }
         // No package.json, create harbor.json
         config = {
-          domain: 'localhost',
-          useSudo: false,
           services: [],
         };
         console.log('Creating new harbor.json...');
@@ -311,7 +250,6 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
           const service: DevService = {
             name: folder.name,
             path: folderPath,
-            subdomain: folder.name.toLowerCase().replace(/\s+/g, ''),
           };
 
           // Try to determine default command based on project type
@@ -334,33 +272,6 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
 
     if (!newServicesAdded) {
       console.log('No new services found to add, feel free to add them manually');
-      // Still write the initial config even if no services were found
-      const validationError = validateConfig(config);
-      if (validationError) {
-        throw new Error(`Invalid harbor configuration: ${validationError}`);
-      }
-
-      if (writeToPackageJson) {
-        // Update package.json
-        const packageData = await fs.promises.readFile('package.json', 'utf-8');
-        const packageJson = JSON.parse(packageData);
-        packageJson.harbor = config;
-        await fs.promises.writeFile(
-          'package.json',
-          JSON.stringify(packageJson, null, 2),
-          'utf-8'
-        );
-        console.log('\npackage.json updated successfully with harbor configuration');
-      } else {
-        // Write to harbor.json
-        await fs.promises.writeFile(
-          'harbor.json',
-          JSON.stringify(config, null, 2),
-          'utf-8'
-        );
-        console.log('\nharbor.json created successfully');
-      }
-      return false;
     }
 
     const validationError = validateConfig(config);
@@ -390,7 +301,6 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
     }
 
     console.log('\nImportant:');
-    console.log('  - Update the \'Port\' field for each service to match its actual port or leave blank to ignore in the Caddyfile');
     console.log('  - Verify the auto-detected commands are correct for your services');
     return true;
   } catch (err) {
@@ -436,70 +346,6 @@ async function readHarborConfig(): Promise<Config> {
   throw new Error('No harbor configuration found in harbor.json or package.json');
 }
 
-async function stopCaddy(): Promise<void> {
-  try {
-    console.log('\n⚠️  Stopping any existing Caddy processes...');
-    console.log('   This will interrupt any active Harbor or Caddy services\n');
-    
-    // Try to kill any existing Caddy processes
-    await new Promise<void>((resolve) => {
-      const isWindows = process.platform === 'win32';
-      const killCommand = isWindows ? 'taskkill /F /IM caddy.exe' : 'pkill caddy';
-      
-      const childProcess = spawn('sh', ['-c', killCommand]);
-      childProcess.on('close', () => {
-        // It's okay if there was no process to kill (code 1)
-        resolve();
-      });
-    });
-    
-    // Give it a moment to fully release ports
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  } catch (err) {
-    // Ignore errors as the process might not exist
-  }
-}
-
-async function generateCaddyFile(): Promise<void> {
-  try {
-    const config = await readHarborConfig();
-    let caddyfileContent = '';
-
-    // Check if any services need a Caddyfile
-    const needsCaddyfile = config.services.some(svc => svc.port && svc.subdomain);
-    
-    if (!needsCaddyfile) {
-      // If no services need a Caddyfile, remove it if it exists
-      if (fileExists('Caddyfile')) {
-        await fs.promises.unlink('Caddyfile');
-        console.log('Removed Caddyfile as no services require subdomains');
-      }
-      return;
-    }
-
-    for (const svc of config.services) {
-      if (!svc.port || !svc.subdomain) {
-        continue;
-      }
-
-      const serverName = `${svc.subdomain}.${config.domain}`;
-      caddyfileContent += `${serverName} {\n`;
-      caddyfileContent += `  reverse_proxy localhost:${svc.port}\n`;
-      caddyfileContent += "}\n\n";
-    }
-
-    await fs.promises.writeFile('Caddyfile', caddyfileContent, 'utf-8');
-    
-    // Stop existing Caddy process before proceeding
-    await stopCaddy();
-    
-    console.log('Caddyfile generated successfully');
-  } catch (err) {
-    console.error('Error generating Caddyfile:', err);
-    process.exit(1);
-  }
-}
-
 async function runServices(): Promise<void> {
   const hasHarborConfig = checkHasHarborConfig();
 
@@ -522,21 +368,6 @@ async function runServices(): Promise<void> {
   } catch (err) {
     console.error('Error reading config:', err);
     process.exit(1);
-  }
-
-  // Check if any services need a Caddyfile
-  const needsCaddyfile = config.services.some(svc => svc.port && svc.subdomain);
-
-  if (needsCaddyfile && !fileExists('Caddyfile')) {
-    console.log('❌ No Caddyfile found, but some services require subdomains');
-    console.log('\nTo generate the Caddyfile:');
-    console.log('  harbor anchor');
-    process.exit(1);
-  }
-
-  // Stop any existing Caddy process if we need it
-  if (needsCaddyfile) {
-    await stopCaddy();
   }
 
   // Ensure scripts exist and are executable
