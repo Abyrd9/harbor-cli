@@ -20,3 +20,8 @@ Adding support to put configuration into package.json if it exists rather than d
 
 Fixing useSudo and caddy tab
 
+
+## v1.0.0 - 2025-04-30
+
+Removing references or work around managing and setting up Caddy. It's just too much work for little gain.
+
