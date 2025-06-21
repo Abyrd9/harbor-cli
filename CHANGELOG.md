@@ -25,3 +25,8 @@ Fixing useSudo and caddy tab
 
 Removing references or work around managing and setting up Caddy. It's just too much work for little gain.
 
+
+## v1.0.1 - 2025-06-20
+
+Updating packages
+
