@@ -38,12 +38,12 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^13.1.0"
+    "@commander-js/extra-typings": "^14.0.0"
   },
   "devDependencies": {
-    "@types/node": "^22.13.1",
+    "@types/node": "^24.0.3",
     "bun-types": "latest",
-    "typescript": "^5.7.3"
+    "typescript": "^5.8.3"
   },
   "main": "index.js",
   "harbor": {
