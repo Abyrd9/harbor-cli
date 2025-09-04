@@ -68,8 +68,15 @@ type DevService = {
   command?: string;
 }
 
+type Script = {
+  path: string;
+  command: string;
+}
+
 type Config = {
   services: DevService[];
+  before?: Script[];
+  after?: Script[];
 }
 
 const possibleProjectFiles = [
@@ -182,6 +189,40 @@ function validateConfig(config: Config): string | null {
     }
   }
 
+  // Validate before scripts
+  if (config.before && !Array.isArray(config.before)) {
+    return 'Before scripts must be an array';
+  }
+
+  if (config.before) {
+    for (let i = 0; i < config.before.length; i++) {
+      const script = config.before[i];
+      if (!script.path) {
+        return `Before script ${i} must have a path`;
+      }
+      if (!script.command) {
+        return `Before script ${i} must have a command`;
+      }
+    }
+  }
+
+  // Validate after scripts
+  if (config.after && !Array.isArray(config.after)) {
+    return 'After scripts must be an array';
+  }
+
+  if (config.after) {
+    for (let i = 0; i < config.after.length; i++) {
+      const script = config.after[i];
+      if (!script.path) {
+        return `After script ${i} must have a path`;
+      }
+      if (!script.command) {
+        return `After script ${i} must have a command`;
+      }
+    }
+  }
+
   return null;
 }
 
@@ -214,12 +255,16 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
           writeToPackageJson = true;
           config = {
             services: [],
+            before: [],
+            after: [],
           };
           console.log('Creating new harbor config in package.json...');
         } else {
           // No package.json, create harbor.json
           config = {
             services: [],
+            before: [],
+            after: [],
           };
           console.log('Creating new harbor.json...');
         }
@@ -346,6 +391,46 @@ async function readHarborConfig(): Promise<Config> {
   throw new Error('No harbor configuration found in harbor.json or package.json');
 }
 
+async function execute(scripts: Script[], scriptType: string): Promise<void> {
+  if (!scripts || scripts.length === 0) {
+    return;
+  }
+
+  console.log(`\n🚀 Executing ${scriptType} scripts...`);
+
+  for (let i = 0; i < scripts.length; i++) {
+    const script = scripts[i];
+    console.log(`\n📋 Running ${scriptType} script ${i + 1}/${scripts.length}: ${script.command}`);
+    console.log(`   📁 In directory: ${script.path}`);
+
+    try {
+      await new Promise((resolve, reject) => {
+        const process = spawn('sh', ['-c', `cd "${script.path}" && ${script.command}`], {
+          stdio: 'inherit',
+        });
+
+        process.on('close', (code) => {
+          if (code === 0) {
+            console.log(`✅ ${scriptType} script ${i + 1} completed successfully`);
+            resolve(null);
+          } else {
+            reject(new Error(`${scriptType} script ${i + 1} exited with code ${code}`));
+          }
+        });
+
+        process.on('error', (err) => {
+          reject(new Error(`${scriptType} script ${i + 1} failed: ${err.message}`));
+        });
+      });
+    } catch (err) {
+      console.error(`❌ Error executing ${scriptType} script ${i + 1}:`, err instanceof Error ? err.message : 'Unknown error');
+      throw err;
+    }
+  }
+
+  console.log(`\n✅ All ${scriptType} scripts completed successfully`);
+}
+
 async function runServices(): Promise<void> {
   const hasHarborConfig = checkHasHarborConfig();
 
@@ -370,6 +455,14 @@ async function runServices(): Promise<void> {
     process.exit(1);
   }
 
+  // Execute before scripts
+  try {
+    await execute(config.before || [], 'before');
+  } catch (err) {
+    console.error('❌ Before scripts failed, aborting launch');
+    process.exit(1);
+  }
+
   // Ensure scripts exist and are executable
   await ensureScriptsExist();
 
@@ -385,12 +478,20 @@ async function runServices(): Promise<void> {
       process.exit(1);
     });
 
-    command.on('close', (code) => {
+    command.on('close', async (code) => {
       if (code !== 0) {
         console.error(`dev.sh exited with code ${code}`);
         process.exit(1);
       }
-      resolve();
+
+      // Execute after scripts
+      try {
+        await execute(config.after || [], 'after');
+        resolve();
+      } catch (err) {
+        console.error('❌ After scripts failed');
+        process.exit(1);
+      }
     });
   });
 }
