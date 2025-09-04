@@ -30,3 +30,8 @@ Removing references or work around managing and setting up Caddy. It's just too 
 
 Updating packages
 
+
+## v1.1.0 - 2025-09-03
+
+Adding support for before/after scripts in config
+
