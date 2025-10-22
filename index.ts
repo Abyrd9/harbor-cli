@@ -7,6 +7,7 @@ import { spawn } from 'node:child_process';
 import { chmodSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import os from 'node:os';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +19,15 @@ interface Dependency {
   command: string;
   installMsg: string;
   requiredFor: string;
+}
+
+interface OSInfo {
+  platform: string;
+  arch: string;
+  isWindows: boolean;
+  isMac: boolean;
+  isLinux: boolean;
+  isWSL: boolean;
 }
 
 const requiredDependencies: Dependency[] = [
@@ -35,8 +45,105 @@ const requiredDependencies: Dependency[] = [
   },
 ];
 
+function detectOS(): OSInfo {
+  const platform = os.platform();
+  const arch = os.arch();
+  const isWindows = platform === 'win32';
+  const isMac = platform === 'darwin';
+  const isLinux = platform === 'linux';
+  
+  // Check if running in WSL
+  let isWSL = false;
+  if (isLinux) {
+    try {
+      const release = fs.readFileSync('/proc/version', 'utf-8');
+      isWSL = release.toLowerCase().includes('microsoft') || release.toLowerCase().includes('wsl');
+    } catch {
+      // If we can't read /proc/version, assume not WSL
+    }
+  }
+  
+  return {
+    platform,
+    arch,
+    isWindows,
+    isMac,
+    isLinux,
+    isWSL,
+  };
+}
+
+function getInstallInstructions(dependency: string, osInfo: OSInfo): string[] {
+  const instructions: string[] = [];
+  
+  if (dependency === 'tmux') {
+    if (osInfo.isMac) {
+      instructions.push('🍎 macOS:');
+      instructions.push('  • Using Homebrew: brew install tmux');
+      instructions.push('  • Using MacPorts: sudo port install tmux');
+      instructions.push('  • Manual: https://github.com/tmux/tmux/wiki/Installing');
+    } else if (osInfo.isLinux) {
+      if (osInfo.isWSL) {
+        instructions.push('🐧 WSL/Linux:');
+        instructions.push('  • Ubuntu/Debian: sudo apt update && sudo apt install tmux');
+        instructions.push('  • CentOS/RHEL: sudo yum install tmux');
+        instructions.push('  • Fedora: sudo dnf install tmux');
+        instructions.push('  • Arch: sudo pacman -S tmux');
+        instructions.push('  • openSUSE: sudo zypper install tmux');
+      } else {
+        instructions.push('🐧 Linux:');
+        instructions.push('  • Ubuntu/Debian: sudo apt update && sudo apt install tmux');
+        instructions.push('  • CentOS/RHEL: sudo yum install tmux');
+        instructions.push('  • Fedora: sudo dnf install tmux');
+        instructions.push('  • Arch: sudo pacman -S tmux');
+        instructions.push('  • openSUSE: sudo zypper install tmux');
+      }
+    } else if (osInfo.isWindows) {
+      instructions.push('🪟 Windows:');
+      instructions.push('  • Using Chocolatey: choco install tmux');
+      instructions.push('  • Using Scoop: scoop install tmux');
+      instructions.push('  • Using WSL: Install in WSL and use from there');
+      instructions.push('  • Manual: https://github.com/tmux/tmux/wiki/Installing');
+    }
+  } else if (dependency === 'jq') {
+    if (osInfo.isMac) {
+      instructions.push('🍎 macOS:');
+      instructions.push('  • Using Homebrew: brew install jq');
+      instructions.push('  • Using MacPorts: sudo port install jq');
+      instructions.push('  • Using Fink: fink install jq');
+      instructions.push('  • Manual: https://jqlang.org/download/');
+    } else if (osInfo.isLinux) {
+      if (osInfo.isWSL) {
+        instructions.push('🐧 WSL/Linux:');
+        instructions.push('  • Ubuntu/Debian: sudo apt update && sudo apt install jq');
+        instructions.push('  • CentOS/RHEL: sudo yum install jq');
+        instructions.push('  • Fedora: sudo dnf install jq');
+        instructions.push('  • Arch: sudo pacman -S jq');
+        instructions.push('  • openSUSE: sudo zypper install jq');
+      } else {
+        instructions.push('🐧 Linux:');
+        instructions.push('  • Ubuntu/Debian: sudo apt update && sudo apt install jq');
+        instructions.push('  • CentOS/RHEL: sudo yum install jq');
+        instructions.push('  • Fedora: sudo dnf install jq');
+        instructions.push('  • Arch: sudo pacman -S jq');
+        instructions.push('  • openSUSE: sudo zypper install jq');
+      }
+    } else if (osInfo.isWindows) {
+      instructions.push('🪟 Windows:');
+      instructions.push('  • Using winget: winget install jqlang.jq');
+      instructions.push('  • Using Chocolatey: choco install jq');
+      instructions.push('  • Using Scoop: scoop install jq');
+      instructions.push('  • Using WSL: Install in WSL and use from there');
+      instructions.push('  • Manual: https://jqlang.org/download/');
+    }
+  }
+  
+  return instructions;
+}
+
 async function checkDependencies(): Promise<void> {
   const missingDeps: Dependency[] = [];
+  const osInfo = detectOS();
 
   for (const dep of requiredDependencies) {
     try {
@@ -54,10 +161,21 @@ async function checkDependencies(): Promise<void> {
 
   if (missingDeps.length > 0) {
     console.log('❌ Missing required dependencies:');
+    console.log(`\n🖥️  Detected OS: ${osInfo.platform} ${osInfo.arch}${osInfo.isWSL ? ' (WSL)' : ''}`);
+    
     for (const dep of missingDeps) {
-      console.log(`\n${dep.name} (required for ${dep.requiredFor})`);
-      console.log(`Install instructions: ${dep.installMsg}`);
+      console.log(`\n📦 ${dep.name} (required for ${dep.requiredFor})`);
+      
+      const instructions = getInstallInstructions(dep.name, osInfo);
+      if (instructions.length > 0) {
+        console.log('   Installation options:');
+        instructions.forEach(instruction => console.log(instruction));
+      } else {
+        console.log(`   General instructions: ${dep.installMsg}`);
+      }
     }
+    
+    console.log('\n💡 After installing the dependencies, run Harbor again.');
     throw new Error('Please install missing dependencies before continuing');
   }
 }
@@ -120,6 +238,8 @@ This is typically the first command you'll run in a new project.`)
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
     try {
+      await checkDependencies();
+      
       const configExists = checkHasHarborConfig();
 
       if (configExists) {
@@ -141,14 +261,21 @@ program.command('moor')
   .description('Add new services to your harbor configuration')
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
-    if (!checkHasHarborConfig()) {
-      console.log('❌ No harbor configuration found');
-      console.log('\nTo initialize a new Harbor project, please use:');
-      console.log('  harbor dock');
+    try {
+      await checkDependencies();
+      
+      if (!checkHasHarborConfig()) {
+        console.log('❌ No harbor configuration found');
+        console.log('\nTo initialize a new Harbor project, please use:');
+        console.log('  harbor dock');
+        process.exit(1);
+      }
+      
+      await generateDevFile(options.path);
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
-    
-    await generateDevFile(options.path);
   });
 
 program.command('launch')
@@ -156,7 +283,13 @@ program.command('launch')
 
 Note: This command will stop any active Caddy processes, including those from other Harbor projects.`)
   .action(async () => {
-    await runServices();
+    try {
+      await checkDependencies();
+      await runServices();
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      process.exit(1);
+    }
   });
 
 program.parse();
