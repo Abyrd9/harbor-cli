@@ -35,3 +35,8 @@ Updating packages
 
 Adding support for before/after scripts in config
 
+
+##  - 2025-10-21
+
+Adding helpful tips to install TMUX and JQ if they are not yet installed when using CLI
+
