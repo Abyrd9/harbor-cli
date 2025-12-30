@@ -47,3 +47,9 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 - Add configurable `maxLogLines` per service to prevent log files from growing unbounded
 - Logs are automatically stripped of ANSI escape codes for clean, readable output
 - Auto-generate changelog from git commits in release script
+
+## v2.0.1 - 2025-12-30
+
+- 2.0.1
+- Updating release again
+
