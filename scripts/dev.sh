@@ -21,7 +21,8 @@ start_log_trim() {
     local log_file="$1"
     local max_lines="$2"
     # Run trimmer inside tmux so it survives script exit
-    tmux send-keys -t "$session_name":0 "( while true; do sleep 5; if [ -f \"$log_file\" ]; then lines=\$(wc -l < \"$log_file\"); if [ \"\$lines\" -gt $max_lines ]; then tail -n $max_lines \"$log_file\" > \"${log_file}.tmp\" && mv \"${log_file}.tmp\" \"$log_file\"; fi; fi; done ) &" C-m
+    # Use cp + truncate + cat to preserve the file descriptor (pipe-pane keeps writing to same fd)
+    tmux send-keys -t "$session_name":0 "( while true; do sleep 5; if [ -f \"$log_file\" ]; then lines=\$(wc -l < \"$log_file\"); if [ \"\$lines\" -gt $max_lines ]; then tail -n $max_lines \"$log_file\" > \"${log_file}.tmp\" && cat \"${log_file}.tmp\" > \"$log_file\" && rm \"${log_file}.tmp\"; fi; fi; done ) &" C-m
 }
 
 trap cleanup_logs EXIT
@@ -124,9 +125,10 @@ while read service; do
     if [ "$log" = "true" ]; then
         log_file="$repo_root/.harbor/${session_name}-${name}.log"
         : > "$log_file"
-        # Run command directly (not via send-keys) to avoid shell echo
-        # Strip ANSI escape sequences and control chars before writing to log file
-        tmux new-window -t "$session_name":$window_index -n "$name" "cd \"$path\" && $command 2>&1 | sed -u 's/\\x1b\\[[0-9;]*[mGKHJ]//g' | tee -a \"$log_file\"; exec bash"
+        # Use pipe-pane to capture ALL terminal output (works with any program, no buffering issues)
+        tmux new-window -t "$session_name":$window_index -n "$name"
+        tmux pipe-pane -t "$session_name":$window_index "cat >> \"$log_file\""
+        tmux send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
         # Start background process to trim logs if they get too large
         start_log_trim "$log_file" "$effective_max_lines"
     else
