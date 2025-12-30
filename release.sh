@@ -3,7 +3,21 @@
 # Colors for output
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+RED='\033[0;31m'
 NC='\033[0m' # No Color
+
+# Load .env file if it exists
+if [ -f .env ]; then
+    export $(grep -v '^#' .env | xargs)
+fi
+
+# Check for NPM_TOKEN
+if [ -z "$NPM_TOKEN" ]; then
+    echo -e "${RED}Error: NPM_TOKEN environment variable is not set${NC}"
+    echo "Create a granular access token at https://www.npmjs.com/settings/tokens"
+    echo "Then add to .env: NPM_TOKEN=npm_xxxxx"
+    exit 1
+fi
 
 # Ensure we're on main branch
 current_branch=$(git branch --show-current)
@@ -76,7 +90,7 @@ git commit --amend --no-edit
 
 # Publish
 echo -e "${GREEN}Publishing to npm...${NC}"
-bun publish
+npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"
 
 # Push changes
 echo -e "${GREEN}Pushing changes to repository...${NC}"
