@@ -36,7 +36,14 @@ Updating packages
 Adding support for before/after scripts in config
 
 
-##  - 2025-10-21
+## v1.1.1 - 2025-10-21
 
 Adding helpful tips to install TMUX and JQ if they are not yet installed when using CLI
 
+
+## v2.0.0 - 2025-12-30
+
+- Add service logging for AI agents (`log: true` streams output to `.harbor/` directory)
+- Add configurable `maxLogLines` per service to prevent log files from growing unbounded
+- Logs are automatically stripped of ANSI escape codes for clean, readable output
+- Auto-generate changelog from git commits in release script

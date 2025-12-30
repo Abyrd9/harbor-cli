@@ -1,6 +1,6 @@
 {
   "name": "@abyrd9/harbor-cli",
-  "version": "1.1.1",
+  "version": "2.0.0",
   "description": "A CLI tool for orchestrating local development services in tmux sessions. Perfect for microservices and polyglot projects with automatic service discovery and before/after script support.",
   "type": "module",
   "bin": {
@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "check": "bunx npm-check -u",
-    "build": "tsc",
+    "build": "bunx tsc",
     "prepare": "bun run build",
     "start": "bun dist/index.js",
     "harbor": "bun dist/index.js",
@@ -49,14 +49,18 @@
   "harbor": {
     "services": [
       {
-        "name": "vite-project",
-        "path": "test-services/vite-project",
-        "command": "npm run dev"
+        "name": "web",
+        "path": "test-services/web",
+        "command": "bun run dev",
+        "log": true,
+        "maxLogLines": 500
       },
       {
         "name": "go-api",
         "path": "test-services/go-api",
-        "command": "go run ."
+        "command": "go run .",
+        "log": true,
+        "maxLogLines": 500
       }
     ]
   }

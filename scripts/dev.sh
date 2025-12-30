@@ -6,6 +6,26 @@ if tmux has-session -t local-dev-test 2>/dev/null; then
     tmux kill-session -t local-dev-test
 fi
 
+session_name="local-dev-test"
+repo_root="$(pwd)"
+max_log_lines=1000
+log_pids=()
+
+cleanup_logs() {
+    for pid in "${log_pids[@]}"; do
+        kill "$pid" 2>/dev/null
+    done
+}
+
+start_log_trim() {
+    local log_file="$1"
+    local max_lines="$2"
+    # Run trimmer inside tmux so it survives script exit
+    tmux send-keys -t "$session_name":0 "( while true; do sleep 5; if [ -f \"$log_file\" ]; then lines=\$(wc -l < \"$log_file\"); if [ \"\$lines\" -gt $max_lines ]; then tail -n $max_lines \"$log_file\" > \"${log_file}.tmp\" && mv \"${log_file}.tmp\" \"$log_file\"; fi; fi; done ) &" C-m
+}
+
+trap cleanup_logs EXIT
+
 # Function to get harbor config
 get_harbor_config() {
     if [ -f "harbor.json" ]; then
@@ -18,7 +38,7 @@ get_harbor_config() {
 }
 
 # Start a new tmux session named 'local-dev-test' and rename the initial window
-tmux new-session -d -s local-dev-test
+tmux new-session -d -s "$session_name"
 
 # Set tmux options
 tmux set-option -g prefix C-a
@@ -77,31 +97,51 @@ tmux set-option -g 'status-format[0]' ''
 
 # Create a new window for the interactive shell
 echo "Creating window for interactive shell"
-tmux rename-window -t local-dev-test:0 'Terminal'
+tmux rename-window -t "$session_name":0 'Terminal'
 
 window_index=1  # Start from index 1
 
+if get_harbor_config | jq -e '.services[] | select(.log == true)' >/dev/null 2>&1; then
+    mkdir -p "$repo_root/.harbor"
+    rm -f "$repo_root/.harbor/${session_name}-"*.log
+fi
+
 # Create windows dynamically based on harbor config
-get_harbor_config | jq -c '.services[]' | while read service; do
+while read service; do
     name=$(echo $service | jq -r '.name')
     path=$(echo $service | jq -r '.path')
     command=$(echo $service | jq -r '.command')
+    log=$(echo $service | jq -r '.log // false')
+    service_max_lines=$(echo $service | jq -r '.maxLogLines // empty')
+    
+    # Use service-specific maxLogLines or fall back to default
+    effective_max_lines="${service_max_lines:-$max_log_lines}"
     
     echo "Creating window for service: $name"
     echo "Path: $path"
     echo "Command: $command"
     
-    tmux new-window -t local-dev-test:$window_index -n "$name"
-    tmux send-keys -t local-dev-test:$window_index "cd $path && $command" C-m
+    if [ "$log" = "true" ]; then
+        log_file="$repo_root/.harbor/${session_name}-${name}.log"
+        : > "$log_file"
+        # Run command directly (not via send-keys) to avoid shell echo
+        # Strip ANSI escape sequences and control chars before writing to log file
+        tmux new-window -t "$session_name":$window_index -n "$name" "cd \"$path\" && $command 2>&1 | sed -u 's/\\x1b\\[[0-9;]*[mGKHJ]//g' | tee -a \"$log_file\"; exec bash"
+        # Start background process to trim logs if they get too large
+        start_log_trim "$log_file" "$effective_max_lines"
+    else
+        tmux new-window -t "$session_name":$window_index -n "$name"
+        tmux send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
+    fi
     
     ((window_index++))
-done
+done < <(get_harbor_config | jq -c '.services[]')
 
 # Bind 'Home' key to switch to the terminal window
 tmux bind-key -n Home select-window -t :0
 
 # Select the terminal window
-tmux select-window -t local-dev-test:0
+tmux select-window -t "$session_name":0
 
 # Attach to the tmux session
-tmux attach-session -t local-dev-test
+tmux attach-session -t "$session_name"

@@ -46,13 +46,29 @@ npm run build
 echo -e "${GREEN}Bumping version...${NC}"
 new_version=$(npm version $bump)
 
-# Generate changelog entry
+# Generate changelog entry from commits since last tag
 date=$(date +"%Y-%m-%d")
-echo -e "${GREEN}Generating changelog entry...${NC}"
+echo -e "${GREEN}Generating changelog from commits...${NC}"
+
+# Get the previous tag
+previous_tag=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+
+# Get commits since last tag (or all commits if no previous tag)
+if [ -n "$previous_tag" ]; then
+    commits=$(git log --pretty=format:"- %s" "$previous_tag"..HEAD)
+else
+    commits=$(git log --pretty=format:"- %s")
+fi
+
+if [ -z "$commits" ]; then
+    commits="- Bug fixes and improvements"
+fi
+
 echo -e "\n## $new_version - $date\n" >> CHANGELOG.md
-echo "Please enter changelog message (press Ctrl+D when done):"
-changelog_entry=$(cat)
-echo -e "$changelog_entry\n" >> CHANGELOG.md
+echo -e "$commits\n" >> CHANGELOG.md
+
+echo -e "${GREEN}Added to changelog:${NC}"
+echo "$commits"
 
 # Commit changelog
 git add CHANGELOG.md

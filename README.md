@@ -10,8 +10,13 @@ A CLI tool for managing local development services with ease. Harbor helps you o
 - 🔄 **Dependency Management**: Automatically checks for required system dependencies
 - 🎯 **Multi-Language Support**: Works with Node.js, Go, Rust, Python, PHP, Java, and more
 - 🖥️ **Tmux Integration**: Professional terminal multiplexing for service management
+- 🤖 **AI Agent Friendly**: Stream service logs to files for AI coding assistants to monitor
 
 ## Installation
+
+```bash
+bun add -g @abyrd9/harbor-cli
+```
 
 ```bash
 npm install -g @abyrd9/harbor-cli
@@ -60,12 +65,15 @@ Create a dedicated configuration file:
     {
       "name": "frontend",
       "path": "./vite-frontend",
-      "command": "npm run dev"
+      "command": "npm run dev",
+      "log": true
     },
     {
       "name": "api",
       "path": "./go-api",
-      "command": "go run ."
+      "command": "go run .",
+      "log": true,
+      "maxLogLines": 500
     },
     {
       "name": "database",
@@ -201,6 +209,42 @@ Override auto-detected commands by editing your configuration:
   ]
 }
 ```
+
+### Service Logging for AI Agents
+
+Enable logging to stream service output to files in `.harbor/`. This is particularly useful when working with AI coding assistants (like Opencode, Codex, or Claude) that can read log files to understand what's happening in your services.
+
+```json
+{
+  "services": [
+    {
+      "name": "api",
+      "path": "./api",
+      "command": "go run .",
+      "log": true,
+      "maxLogLines": 500
+    },
+    {
+      "name": "frontend",
+      "path": "./frontend", 
+      "command": "npm run dev",
+      "log": true
+    }
+  ]
+}
+```
+
+**Options:**
+- `log`: `true` to enable logging (default: `false`)
+- `maxLogLines`: Maximum lines to keep in log file (default: `1000`)
+
+**Log files are:**
+- Stored in `.harbor/` directory (automatically added to `.gitignore`)
+- Named `{session}-{service}.log` (e.g., `local-dev-test-api.log`)
+- Automatically trimmed to prevent unbounded growth
+- Stripped of ANSI escape codes for clean, readable output
+
+**Use case:** Point your AI assistant to the `.harbor/` folder so it can monitor service logs, spot errors, and understand runtime behavior while helping you develop.
 
 ### Before/After Scripts
 Run custom scripts before and after your services start:
