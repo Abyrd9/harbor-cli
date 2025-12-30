@@ -11,6 +11,7 @@ type Response struct {
 }
 
 func handler(w http.ResponseWriter, r *http.Request) {
+	log.Println("Hello, world")
 	response := Response{
 		Message: "Hello, World!",
 	}

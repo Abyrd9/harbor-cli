@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "check": "bunx npm-check -u",
-    "build": "tsc",
+    "build": "bunx tsc",
     "prepare": "bun run build",
     "start": "bun dist/index.js",
     "harbor": "bun dist/index.js",
@@ -49,14 +49,18 @@
   "harbor": {
     "services": [
       {
-        "name": "vite-project",
-        "path": "test-services/vite-project",
-        "command": "npm run dev"
+        "name": "web",
+        "path": "test-services/web",
+        "command": "bun run dev",
+        "log": true,
+        "maxLogLines": 500
       },
       {
         "name": "go-api",
         "path": "test-services/go-api",
-        "command": "go run ."
+        "command": "go run .",
+        "log": true,
+        "maxLogLines": 500
       }
     ]
   }

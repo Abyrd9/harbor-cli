@@ -66,6 +66,8 @@ type DevService = {
   name: string;
   path: string;
   command?: string;
+  log?: boolean;
+  maxLogLines?: number;
 }
 
 type Script = {
@@ -455,6 +457,8 @@ async function runServices(): Promise<void> {
     process.exit(1);
   }
 
+  ensureLogSetup(config);
+
   // Execute before scripts
   try {
     await execute(config.before || [], 'before');
@@ -494,6 +498,32 @@ async function runServices(): Promise<void> {
       }
     });
   });
+}
+
+function ensureLogSetup(config: Config): void {
+  const shouldLog = config.services.some((service) => service.log);
+  if (!shouldLog) {
+    return;
+  }
+
+  const harborDir = path.join(process.cwd(), '.harbor');
+  if (!fs.existsSync(harborDir)) {
+    fs.mkdirSync(harborDir, { recursive: true });
+  }
+
+  const gitignorePath = path.join(process.cwd(), '.gitignore');
+  if (!fs.existsSync(gitignorePath)) {
+    return;
+  }
+
+  const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
+  if (gitignore.includes('.harbor')) {
+    return;
+  }
+
+  const needsNewline = gitignore.length > 0 && !gitignore.endsWith('\n');
+  const entry = `${needsNewline ? '\n' : ''}.harbor/\n`;
+  fs.appendFileSync(gitignorePath, entry, 'utf-8');
 }
 
 // Get the package root directory
@@ -555,4 +585,3 @@ function checkHasHarborConfig(): boolean {
     return false;
   }
 }
-
