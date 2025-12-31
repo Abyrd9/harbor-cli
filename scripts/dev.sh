@@ -84,17 +84,15 @@ tmux bind-key -T copy-mode-vi v send-keys -X begin-selection
 tmux bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
 tmux bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
 
-# Set easier window navigation shortcuts (Shift+Left/Right or Tab/Shift+Tab to switch windows)
+# Set easier window navigation shortcuts (Shift+Left/Right to switch windows)
 tmux bind-key -n S-Left select-window -t :-
 tmux bind-key -n S-Right select-window -t :+
-tmux bind-key -n Tab select-window -t :+
-tmux bind-key -n BTab select-window -t :-
 
 # Configure status bar
 tmux set-option -g status-position top
 tmux set-option -g status-style bg="#1c1917",fg="#a8a29e"
 tmux set-option -g status-left ""
-tmux set-option -g status-right "#[fg=#a8a29e]tab/shift+tab switch · ctrl+q close · #[fg=white]%H:%M#[default]"
+tmux set-option -g status-right "#[fg=#a8a29e]shift+←/→ switch · ctrl+q close · #[fg=white]%H:%M#[default]"
 tmux set-window-option -g window-status-current-format "\
 #[fg=#6366f1, bg=#1c1917] →
 #[fg=#6366f1, bg=#1c1917, bold] #W
