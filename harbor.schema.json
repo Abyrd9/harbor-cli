@@ -1,0 +1,87 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/Abyrd9/harbor-cli/main/harbor.schema.json",
+  "title": "Harbor Configuration",
+  "description": "Configuration schema for Harbor CLI - a tool for running multiple development services",
+  "type": "object",
+  "required": ["services"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "JSON Schema reference for IDE IntelliSense"
+    },
+    "services": {
+      "type": "array",
+      "description": "List of development services to run",
+      "items": {
+        "type": "object",
+        "required": ["name", "path"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Display name for the service (shown in the terminal UI)"
+          },
+          "path": {
+            "type": "string",
+            "description": "Relative path to the service directory from the project root"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to start the service (e.g., 'bun run dev', 'go run .')"
+          },
+          "log": {
+            "type": "boolean",
+            "description": "Whether to log output to a file in .harbor/logs/",
+            "default": false
+          },
+          "maxLogLines": {
+            "type": "integer",
+            "description": "Maximum number of lines to keep in the log file",
+            "minimum": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "before": {
+      "type": "array",
+      "description": "Scripts to run before starting services",
+      "items": {
+        "type": "object",
+        "required": ["path", "command"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to run the command from"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to execute"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "after": {
+      "type": "array",
+      "description": "Scripts to run after all services stop",
+      "items": {
+        "type": "object",
+        "required": ["path", "command"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "Relative path to run the command from"
+          },
+          "command": {
+            "type": "string",
+            "description": "Command to execute"
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}
+
