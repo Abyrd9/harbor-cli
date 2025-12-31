@@ -198,6 +198,7 @@ type Config = {
   services: DevService[];
   before?: Script[];
   after?: Script[];
+  sessionName?: string;
 }
 
 type ConfigLocation = 'package.json' | 'harbor.json';
@@ -253,10 +254,17 @@ program
 Harbor helps you manage multiple local development services with ease.
 It provides a simple way to configure and run your services in a tmux session.
 
+Features:
+  ✅ Automatic service discovery for Node.js, Go, Rust, Python, PHP, Java
+  ✅ Pre-stage commands for setup before main service starts  
+  ✅ Configurable tmux session names
+  ✅ Service logging with file output for monitoring and debugging
+  ✅ Before/after script execution
+
 Available Commands:
-  dock      Initialize a new Harbor project
-  moor      Add new services to your configuration
-  launch    Start all services in a tmux session`)
+  dock      Initialize a new Harbor project by scanning directories
+  moor      Add new services to existing Harbor configuration  
+  launch    Start all services in a tmux session with pre-stage commands`)
   .version(packageJson.version)
   .action(async () => await checkDependencies())
   .addHelpCommand(false);
@@ -267,7 +275,7 @@ if (process.argv.length <= 2) {
 }
 
 program.command('dock')
-  .description('Initialize a new Harbor project with a configuration file')
+  .description('Initialize Harbor config by auto-discovering services in your project')
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
     try {
@@ -291,7 +299,7 @@ program.command('dock')
   });
 
 program.command('moor')
-  .description('Add new services to your harbor configuration')
+  .description('Scan for and add new services to your existing Harbor configuration')
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
     try {
@@ -312,7 +320,7 @@ program.command('moor')
   });
 
 program.command('launch')
-  .description('Start all services in a tmux session')
+  .description('Start all services in a tmux session with pre-stage commands')
   .action(async () => {
     try {
       await checkDependencies();
@@ -329,7 +337,7 @@ function fileExists(path: string) {
   return fs.existsSync(`${process.cwd()}/${path}`);
 }
 
-function isProjectDirectory(dirPath: string): boolean {
+export function isProjectDirectory(dirPath: string): boolean {
   return possibleProjectFiles.some(file => {
     try {
       return fs.existsSync(path.join(process.cwd(), dirPath, file));
@@ -339,7 +347,7 @@ function isProjectDirectory(dirPath: string): boolean {
   });
 }
 
-function validateConfig(config: Config): string | null {
+export function validateConfig(config: Config): string | null {
   if (!Array.isArray(config.services)) {
     return 'Services must be an array';
   }

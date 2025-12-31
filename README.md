@@ -10,7 +10,8 @@ A CLI tool for managing local development services with ease. Harbor helps you o
 - 🔄 **Dependency Management**: Automatically checks for required system dependencies
 - 🎯 **Multi-Language Support**: Works with Node.js, Go, Rust, Python, PHP, Java, and more
 - 🖥️ **Tmux Integration**: Professional terminal multiplexing for service management
-- 🤖 **AI Agent Friendly**: Stream service logs to files for AI coding assistants to monitor
+- 📝 **Service Logging**: Stream service output to log files for monitoring and debugging
+- 🏷️ **Custom Session Names**: Configure unique tmux session names
 
 ## Installation
 
@@ -63,22 +64,33 @@ Create a dedicated configuration file:
 {
   "services": [
     {
-      "name": "frontend",
-      "path": "./vite-frontend",
+      "name": "database",
+      "path": "./db",
+      "preStage": {
+        "command": "docker-compose up -d postgres",
+        "wait": 5,
+        "timeout": 60
+      },
       "command": "npm run dev",
-      "log": true
+      "log": true,
+      "maxLogLines": 500
     },
     {
       "name": "api",
       "path": "./go-api",
+      "preStage": {
+        "command": "go mod download",
+        "wait": 2
+      },
       "command": "go run .",
       "log": true,
       "maxLogLines": 500
     },
     {
-      "name": "database",
-      "path": "./db",
-      "command": "docker-compose up"
+      "name": "frontend",
+      "path": "./vite-frontend",
+      "command": "npm run dev",
+      "log": true
     }
   ],
   "before": [
@@ -96,7 +108,8 @@ Create a dedicated configuration file:
       "path": "./",
       "command": "echo 'Development environment ready!'"
     }
-  ]
+  ],
+  "sessionName": "my-project-dev"
 }
 ```
 
@@ -137,14 +150,16 @@ Store configuration directly in your `package.json`:
 }
 ```
 
+
+
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `harbor dock` | Initialize harbor configuration by scanning project directories |
-| `harbor moor` | Scan for and add new services to existing configuration |
-| `harbor launch` | Start all services in a tmux session |
-| `harbor --help` | Show help and available commands |
+| `harbor dock` | Initialize Harbor config by auto-discovering services in your project |
+| `harbor moor` | Scan for and add new services to your existing Harbor configuration |
+| `harbor launch` | Start all services in a tmux session with pre-stage commands |
+| `harbor --help` | Show comprehensive help with feature descriptions |
 | `harbor --version` | Show version information |
 
 ### Command Options

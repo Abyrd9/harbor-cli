@@ -43,6 +43,11 @@
         "additionalProperties": false
       }
     },
+    "sessionName": {
+      "type": "string",
+      "description": "Custom name for the tmux session (default: local-dev-test)",
+      "pattern": "^[a-zA-Z0-9_-]+$"
+    },
     "before": {
       "type": "array",
       "description": "Scripts to run before starting services",
