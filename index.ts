@@ -8,6 +8,7 @@ import { chmodSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
+import readline from 'node:readline';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -199,6 +200,39 @@ type Config = {
   after?: Script[];
 }
 
+type ConfigLocation = 'package.json' | 'harbor.json';
+
+function promptConfigLocation(): Promise<ConfigLocation> {
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+
+  return new Promise((resolve) => {
+    console.log('\nFound package.json. Where would you like to store harbor config?');
+    console.log('  1. package.json (keeps everything in one place)');
+    console.log('  2. harbor.json (separate config file, auto-IntelliSense)\n');
+
+    const ask = () => {
+      rl.question('Enter choice (1 or 2): ', (answer) => {
+        const choice = answer.trim();
+        if (choice === '1') {
+          rl.close();
+          resolve('package.json');
+        } else if (choice === '2') {
+          rl.close();
+          resolve('harbor.json');
+        } else {
+          console.log('Please enter 1 or 2');
+          ask();
+        }
+      });
+    };
+
+    ask();
+  });
+}
+
 const possibleProjectFiles = [
   'package.json',     // Node.js projects
   'go.mod',           // Go projects
@@ -217,12 +251,12 @@ program
   .description(`A CLI tool for managing your project's local development services
 
 Harbor helps you manage multiple local development services with ease.
-It provides a simple way to configure and run your services in tmux sessions.
+It provides a simple way to configure and run your services in a tmux session.
 
 Available Commands:
   dock      Initialize a new Harbor project
   moor      Add new services to your configuration
-  launch    Start all services in tmux sessions`)
+  launch    Start all services in a tmux session`)
   .version(packageJson.version)
   .action(async () => await checkDependencies())
   .addHelpCommand(false);
@@ -233,10 +267,7 @@ if (process.argv.length <= 2) {
 }
 
 program.command('dock')
-  .description(`Prepares your development environment by creating a harbor configuration file
-- harbor.json configuration file (or harbor field in package.json)
-	
-This is typically the first command you'll run in a new project.`)
+  .description('Initialize a new Harbor project with a configuration file')
   .option('-p, --path <path>', 'The path to the root of your project', './')
   .action(async (options) => {
     try {
@@ -281,9 +312,7 @@ program.command('moor')
   });
 
 program.command('launch')
-  .description(`Launch your services in the harbor terminal multiplexer (Using tmux)
-
-Note: This command will stop any active Caddy processes, including those from other Harbor projects.`)
+  .description('Start all services in a tmux session')
   .action(async () => {
     try {
       await checkDependencies();
@@ -382,26 +411,20 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         const packageJson = JSON.parse(packageData);
         
         if (packageJson.harbor) {
+          // Existing harbor config in package.json, use it
           config = packageJson.harbor;
           writeToPackageJson = true;
           console.log('Found existing harbor config in package.json, scanning for new services...');
-        } else if (fileExists('package.json')) {
-          // If package.json exists but no harbor config, use it
-          writeToPackageJson = true;
-          config = {
-            services: [],
-            before: [],
-            after: [],
-          };
-          console.log('Creating new harbor config in package.json...');
         } else {
-          // No package.json, create harbor.json
+          // package.json exists but no harbor config - ask user where to store it
+          const choice = await promptConfigLocation();
+          writeToPackageJson = choice === 'package.json';
           config = {
             services: [],
             before: [],
             after: [],
           };
-          console.log('Creating new harbor.json...');
+          console.log(`Creating new harbor config in ${choice}...`);
         }
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -470,11 +493,23 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         'utf-8'
       );
       console.log('\npackage.json updated successfully with harbor configuration');
+      console.log('\n💡 Tip: To enable IntelliSense for the harbor config in package.json,');
+      console.log('   add this to your .vscode/settings.json:');
+      console.log('   {');
+      console.log('     "json.schemas": [{');
+      console.log('       "fileMatch": ["package.json"],');
+      console.log('       "url": "https://raw.githubusercontent.com/Abyrd9/harbor-cli/main/harbor.package-json.schema.json"');
+      console.log('     }]');
+      console.log('   }');
     } else {
-      // Write to harbor.json
+      // Write to harbor.json with $schema for IntelliSense
+      const configWithSchema = {
+        $schema: 'https://raw.githubusercontent.com/Abyrd9/harbor-cli/main/harbor.schema.json',
+        ...config,
+      };
       await fs.promises.writeFile(
         'harbor.json',
-        JSON.stringify(config, null, 2),
+        JSON.stringify(configWithSchema, null, 2),
         'utf-8'
       );
       console.log('\nharbor.json created successfully');

@@ -1,6 +1,6 @@
 # Harbor CLI
 
-A CLI tool for managing local development services with ease. Harbor helps you orchestrate multiple development services in tmux sessions, perfect for microservices and polyglot projects.
+A CLI tool for managing local development services with ease. Harbor helps you orchestrate multiple development services in a tmux session, perfect for microservices and polyglot projects.
 
 ## ✨ Features
 
@@ -143,7 +143,7 @@ Store configuration directly in your `package.json`:
 |---------|-------------|
 | `harbor dock` | Initialize harbor configuration by scanning project directories |
 | `harbor moor` | Scan for and add new services to existing configuration |
-| `harbor launch` | Start all services in tmux sessions |
+| `harbor launch` | Start all services in a tmux session |
 | `harbor --help` | Show help and available commands |
 | `harbor --version` | Show version information |
 
