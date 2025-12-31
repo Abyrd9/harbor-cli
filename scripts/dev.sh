@@ -20,9 +20,20 @@ cleanup_logs() {
 start_log_trim() {
     local log_file="$1"
     local max_lines="$2"
-    # Run trimmer inside tmux so it survives script exit
-    # Use cp + truncate + cat to preserve the file descriptor (pipe-pane keeps writing to same fd)
-    tmux send-keys -t "$session_name":0 "( while true; do sleep 5; if [ -f \"$log_file\" ]; then lines=\$(wc -l < \"$log_file\"); if [ \"\$lines\" -gt $max_lines ]; then tail -n $max_lines \"$log_file\" > \"${log_file}.tmp\" && cat \"${log_file}.tmp\" > \"$log_file\" && rm \"${log_file}.tmp\"; fi; fi; done ) &" C-m
+    # Start background log trimmer process
+    {
+        while true; do
+            sleep 5
+            if [ -f "$log_file" ]; then
+                lines=$(wc -l < "$log_file")
+                if [ "$lines" -gt $max_lines ]; then
+                    tail -n $max_lines "$log_file" > "${log_file}.tmp" && \
+                    cat "${log_file}.tmp" > "$log_file" && \
+                    rm "${log_file}.tmp"
+                fi
+            fi
+        done
+    } &
 }
 
 trap cleanup_logs EXIT
