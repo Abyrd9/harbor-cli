@@ -59,6 +59,10 @@ tmux set-option -g mouse on
 tmux set-option -g history-limit 50000
 tmux set-window-option -g mode-keys vi
 
+# Enable extended keys so modifier combinations (like Shift+Enter) pass through to applications
+tmux set-option -g extended-keys on
+tmux set-option -g xterm-keys on
+
 # Add binding to kill session with Ctrl+q
 tmux bind-key -n C-q kill-session
 
