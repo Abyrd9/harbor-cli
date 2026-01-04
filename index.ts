@@ -170,7 +170,7 @@ async function checkDependencies(): Promise<void> {
       const instructions = getInstallInstructions(dep.name, osInfo);
       if (instructions.length > 0) {
         console.log('   Installation options:');
-        instructions.forEach(instruction => console.log(instruction));
+        instructions.forEach(instruction => { console.log(instruction); });
       } else {
         console.log(`   General instructions: ${dep.installMsg}`);
       }
@@ -260,11 +260,15 @@ Features:
   ✅ Configurable tmux session names
   ✅ Service logging with file output for monitoring and debugging
   ✅ Before/after script execution
+  ✅ Headless/detached mode for background execution
 
 Available Commands:
   dock      Initialize a new Harbor project by scanning directories
   moor      Add new services to existing Harbor configuration  
-  launch    Start all services in a tmux session with pre-stage commands`)
+  launch    Start all services in a tmux session (use -d for headless)
+  bearings  Get your bearings - show status of running services
+  anchor    Anchor to a running Harbor session
+  scuttle   Scuttle all running Harbor services`)
   .version(packageJson.version)
   .action(async () => await checkDependencies())
   .addHelpCommand(false);
@@ -321,10 +325,175 @@ program.command('moor')
 
 program.command('launch')
   .description('Start all services in a tmux session with pre-stage commands')
-  .action(async () => {
+  .option('-d, --detach', 'Run services in background without attaching to tmux session')
+  .option('--headless', 'Alias for --detach')
+  .action(async (options) => {
     try {
       await checkDependencies();
-      await runServices();
+      await runServices({ detach: options.detach || options.headless });
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program.command('anchor')
+  .description('Anchor to a running Harbor tmux session')
+  .action(async () => {
+    try {
+      const config = await readHarborConfig();
+      const sessionName = config.sessionName || 'harbor';
+      
+      // Check if session exists
+      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+        stdio: 'pipe',
+      });
+      
+      await new Promise<void>((resolve) => {
+        checkSession.on('close', (code) => {
+          if (code !== 0) {
+            console.log(`❌ No running Harbor session found (looking for: ${sessionName})`);
+            console.log('\nTo start services, run:');
+            console.log('  harbor launch');
+            process.exit(1);
+          }
+          resolve();
+        });
+      });
+      
+      // Attach to the session
+      const attach = spawn('tmux', ['attach-session', '-t', sessionName], {
+        stdio: 'inherit',
+      });
+      
+      attach.on('close', (code) => {
+        process.exit(code || 0);
+      });
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program.command('scuttle')
+  .description('Scuttle all running Harbor services by killing the tmux session')
+  .action(async () => {
+    try {
+      const config = await readHarborConfig();
+      const sessionName = config.sessionName || 'harbor';
+      
+      // Check if session exists
+      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+        stdio: 'pipe',
+      });
+      
+      const sessionExists = await new Promise<boolean>((resolve) => {
+        checkSession.on('close', (code) => {
+          resolve(code === 0);
+        });
+      });
+      
+      if (!sessionExists) {
+        console.log(`ℹ️  No running Harbor session found (looking for: ${sessionName})`);
+        process.exit(0);
+      }
+      
+      // Kill the session
+      const killSession = spawn('tmux', ['kill-session', '-t', sessionName], {
+        stdio: 'inherit',
+      });
+      
+      killSession.on('close', (code) => {
+        if (code === 0) {
+          console.log(`✅ Harbor session '${sessionName}' stopped`);
+        } else {
+          console.log('❌ Failed to stop Harbor session');
+        }
+        process.exit(code || 0);
+      });
+    } catch (err) {
+      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      process.exit(1);
+    }
+  });
+
+program.command('bearings')
+  .description('Get your bearings - show status of running Harbor services')
+  .action(async () => {
+    try {
+      const config = await readHarborConfig();
+      const sessionName = config.sessionName || 'harbor';
+      
+      // Check if session exists
+      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+        stdio: 'pipe',
+      });
+      
+      const sessionExists = await new Promise<boolean>((resolve) => {
+        checkSession.on('close', (code) => {
+          resolve(code === 0);
+        });
+      });
+      
+      if (!sessionExists) {
+        console.log(`\n⚓ Harbor Status\n`);
+        console.log(`   Session:  ${sessionName}`);
+        console.log(`   Status:   Not running\n`);
+        console.log(`   To start services, run:`);
+        console.log(`     harbor launch         # interactive mode`);
+        console.log(`     harbor launch -d      # headless mode\n`);
+        process.exit(0);
+      }
+      
+      // Get list of windows (services)
+      const listWindows = spawn('tmux', ['list-windows', '-t', sessionName, '-F', '#{window_index}|#{window_name}|#{pane_current_command}'], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      
+      let windowOutput = '';
+      listWindows.stdout.on('data', (data) => {
+        windowOutput += data.toString();
+      });
+      
+      await new Promise<void>((resolve) => {
+        listWindows.on('close', () => resolve());
+      });
+      
+      const windows = windowOutput.trim().split('\n').filter(Boolean);
+      
+      console.log(`\n⚓ Harbor Status\n`);
+      console.log(`   Session:  ${sessionName}`);
+      console.log(`   Status:   Running ✓`);
+      console.log(`   Windows:  ${windows.length}\n`);
+      
+      console.log(`   Services:`);
+      for (const window of windows) {
+        const [index, name, cmd] = window.split('|');
+        const logFile = `.harbor/${sessionName}-${name}.log`;
+        const hasLog = fs.existsSync(path.join(process.cwd(), logFile));
+        const logIndicator = hasLog ? ` 📄` : '';
+        console.log(`     [${index}] ${name}${logIndicator}`);
+      }
+      
+      // Check for log files
+      const harborDir = path.join(process.cwd(), '.harbor');
+      if (fs.existsSync(harborDir)) {
+        const logFiles = fs.readdirSync(harborDir).filter(f => f.endsWith('.log'));
+        if (logFiles.length > 0) {
+          console.log(`\n   Logs:`);
+          for (const logFile of logFiles) {
+            const logPath = path.join(harborDir, logFile);
+            const stats = fs.statSync(logPath);
+            const sizeKB = (stats.size / 1024).toFixed(1);
+            console.log(`     .harbor/${logFile} (${sizeKB} KB)`);
+          }
+        }
+      }
+      
+      console.log(`\n   Commands:`);
+      console.log(`     harbor anchor   - Anchor to the session`);
+      console.log(`     harbor scuttle  - Stop all services\n`);
+      
     } catch (err) {
       console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
@@ -609,7 +778,11 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
   console.log(`\n✅ All ${scriptType} scripts completed successfully`);
 }
 
-async function runServices(): Promise<void> {
+interface RunServicesOptions {
+  detach?: boolean;
+}
+
+async function runServices(options: RunServicesOptions = {}): Promise<void> {
   const hasHarborConfig = checkHasHarborConfig();
 
   if (!hasHarborConfig) {
@@ -638,7 +811,7 @@ async function runServices(): Promise<void> {
   // Execute before scripts
   try {
     await execute(config.before || [], 'before');
-  } catch (err) {
+  } catch {
     console.error('❌ Before scripts failed, aborting launch');
     process.exit(1);
   }
@@ -648,11 +821,17 @@ async function runServices(): Promise<void> {
 
   // Execute the script directly using spawn to handle I/O streams
   const scriptPath = path.join(getScriptsDir(), 'dev.sh');
+  const env = {
+    ...process.env,
+    HARBOR_DETACH: options.detach ? '1' : '0',
+  };
+  
   const command = spawn('bash', [scriptPath], {
     stdio: 'inherit', // This will pipe stdin/stdout/stderr to the parent process
+    env,
   });
 
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     command.on('error', (err) => {
       console.error(`Error running dev.sh: ${err}`);
       process.exit(1);
@@ -668,7 +847,7 @@ async function runServices(): Promise<void> {
       try {
         await execute(config.after || [], 'after');
         resolve();
-      } catch (err) {
+      } catch {
         console.error('❌ After scripts failed');
         process.exit(1);
       }

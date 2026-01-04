@@ -1,12 +1,24 @@
 #!/bin/bash
 
-# Check if the session already exists and kill it
-if tmux has-session -t local-dev-test 2>/dev/null; then
-    echo "Killing existing tmux session 'local-dev-test'"
-    tmux kill-session -t local-dev-test
-fi
+# Function to get harbor config
+get_harbor_config() {
+    if [ -f "harbor.json" ]; then
+        cat harbor.json
+    elif [ -f "package.json" ]; then
+        jq '.harbor' package.json
+    else
+        echo "{}"
+    fi
+}
 
-session_name="local-dev-test"
+# Get session name from config or use default
+session_name=$(get_harbor_config | jq -r '.sessionName // "harbor"')
+
+# Check if the session already exists and kill it
+if tmux has-session -t "$session_name" 2>/dev/null; then
+    echo "Killing existing tmux session '$session_name'"
+    tmux kill-session -t "$session_name"
+fi
 repo_root="$(pwd)"
 max_log_lines=1000
 log_pids=()
@@ -38,18 +50,7 @@ start_log_trim() {
 
 trap cleanup_logs EXIT
 
-# Function to get harbor config
-get_harbor_config() {
-    if [ -f "harbor.json" ]; then
-        cat harbor.json
-    elif [ -f "package.json" ]; then
-        jq '.harbor' package.json
-    else
-        echo "{}"
-    fi
-}
-
-# Start a new tmux session named 'local-dev-test' and rename the initial window
+# Start a new tmux session and rename the initial window
 tmux new-session -d -s "$session_name"
 
 # Set tmux options
@@ -98,11 +99,11 @@ tmux set-option -g status-style bg="#1c1917",fg="#a8a29e"
 tmux set-option -g status-left ""
 tmux set-option -g status-right "#[fg=#a8a29e]shift+←/→ switch · ctrl+q close · #[fg=white]%H:%M#[default]"
 tmux set-window-option -g window-status-current-format "\
-#[fg=#6366f1, bg=#1c1917] →
-#[fg=#6366f1, bg=#1c1917, bold] #W
+#[fg=#6366f1, bg=#1c1917] →\
+#[fg=#6366f1, bg=#1c1917, bold] #W\
 #[fg=#6366f1, bg=#1c1917]  "
 tmux set-window-option -g window-status-format "\
-#[fg=#a8a29e, bg=#1c1917]  
+#[fg=#a8a29e, bg=#1c1917]  \
 #[fg=#a8a29e, bg=#1c1917] #W \
 #[fg=#a8a29e, bg=#1c1917] "
 
@@ -160,5 +161,23 @@ tmux bind-key -n Home select-window -t :0
 # Select the terminal window
 tmux select-window -t "$session_name":0
 
-# Attach to the tmux session
-tmux attach-session -t "$session_name"
+# Attach to the tmux session (unless running in detached/headless mode)
+if [ "${HARBOR_DETACH:-0}" = "1" ]; then
+    echo ""
+    echo "🚀 Harbor services started in detached mode"
+    echo ""
+    echo "   Session: $session_name"
+    echo "   Services: $((window_index - 1))"
+    echo ""
+    echo "   Commands:"
+    echo "     harbor anchor  - Anchor to the tmux session"
+    echo "     harbor scuttle - Scuttle all services"
+    echo ""
+    if get_harbor_config | jq -e '.services[] | select(.log == true)' >/dev/null 2>&1; then
+        echo "   Logs:"
+        echo "     tail -f .harbor/${session_name}-<service>.log"
+        echo ""
+    fi
+else
+    tmux attach-session -t "$session_name"
+fi
