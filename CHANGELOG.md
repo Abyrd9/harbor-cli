@@ -121,3 +121,22 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 - 2.0.1
 - Updating release again
 
+
+## v2.2.0 - 2026-01-04
+
+- 2.2.0
+- Better help text for AI
+- Including headless mode and commands to attach to a headless mode
+- 2.1.1
+- Fixing bug with not passing keys into pane sessions
+- 2.1.0
+- Removing "Tab" capture
+- Fixing random code changes that show up on main terminal
+- Add custom tmux session names and comprehensive test suite
+- Updating some questions during setup, Also shift-arrow keys to navigate
+- Pushing up JSON schemas
+- 2.0.2
+- Fixing bugs around logs
+- 2.0.1
+- Updating release again
+
