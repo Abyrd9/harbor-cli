@@ -41,9 +41,11 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('-V, --version');
     });
 
-    it('should mention headless mode in features', async () => {
+    it('should show workflow and requirements', async () => {
       const { stdout } = await runCLI(['--help']);
-      expect(stdout).toContain('Headless');
+      expect(stdout).toContain('TYPICAL WORKFLOW');
+      expect(stdout).toContain('REQUIREMENTS');
+      expect(stdout).toContain('headless');
     });
   });
 
@@ -67,24 +69,29 @@ describe('CLI Commands', () => {
   describe('harbor anchor --help', () => {
     it('should describe anchoring to tmux session', async () => {
       const { stdout } = await runCLI(['anchor', '--help']);
-      expect(stdout).toContain('Anchor');
+      expect(stdout).toContain('Attach');
       expect(stdout).toContain('tmux');
+      expect(stdout).toContain('WHEN TO USE');
+      expect(stdout).toContain('WHAT IT DOES');
     });
   });
 
   describe('harbor scuttle --help', () => {
     it('should describe scuttling services', async () => {
       const { stdout } = await runCLI(['scuttle', '--help']);
-      expect(stdout).toContain('Scuttle');
+      expect(stdout).toContain('Stop');
       expect(stdout).toContain('killing');
+      expect(stdout).toContain('WHEN TO USE');
+      expect(stdout).toContain('WHAT IT DOES');
     });
   });
 
   describe('harbor bearings --help', () => {
     it('should describe showing status', async () => {
       const { stdout } = await runCLI(['bearings', '--help']);
-      expect(stdout).toContain('bearings');
       expect(stdout).toContain('status');
+      expect(stdout).toContain('WHEN TO USE');
+      expect(stdout).toContain('WHAT IT SHOWS');
     });
   });
 });

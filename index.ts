@@ -249,26 +249,35 @@ const program = new Command();
 
 program
   .name('harbor')
-  .description(`A CLI tool for managing your project's local development services
+  .description(`A CLI tool for orchestrating multiple local development services in tmux.
 
-Harbor helps you manage multiple local development services with ease.
-It provides a simple way to configure and run your services in a tmux session.
+WHAT IT DOES:
+  Harbor manages multiple services (APIs, frontends, databases) in a single tmux 
+  session. It auto-discovers projects, starts them together, and provides logging.
 
-Features:
-  ✅ Automatic service discovery for Node.js, Go, Rust, Python, PHP, Java
-  ✅ Pre-stage commands for setup before main service starts  
-  ✅ Configurable tmux session names
-  ✅ Service logging with file output for monitoring and debugging
-  ✅ Before/after script execution
-  ✅ Headless/detached mode for background execution
+REQUIREMENTS:
+  - tmux (terminal multiplexer)
+  - jq (JSON processor)
 
-Available Commands:
-  dock      Initialize a new Harbor project by scanning directories
-  moor      Add new services to existing Harbor configuration  
-  launch    Start all services in a tmux session (use -d for headless)
-  bearings  Get your bearings - show status of running services
-  anchor    Anchor to a running Harbor session
-  scuttle   Scuttle all running Harbor services`)
+TYPICAL WORKFLOW:
+  1. harbor dock          # First time: scan and create harbor.json config
+  2. harbor launch        # Start all services in interactive tmux session
+     harbor launch -d     # Or start in headless/background mode
+  3. harbor bearings      # Check status of running services
+  4. harbor anchor        # Attach to running session (if headless)
+  5. harbor scuttle       # Stop all services when done
+
+CONFIGURATION:
+  Config is stored in harbor.json or package.json under "harbor" key.
+  Services can specify: name, path, command, log (boolean), maxLogLines.
+
+COMMANDS:
+  dock      Create new harbor.json by scanning for projects (package.json, go.mod, etc.)
+  moor      Add newly discovered services to existing config
+  launch    Start all configured services (use -d/--headless for background mode)
+  bearings  Show status: running services, session info, log file locations
+  anchor    Attach terminal to a running Harbor tmux session
+  scuttle   Stop all services by killing the tmux session`)
   .version(packageJson.version)
   .action(async () => await checkDependencies())
   .addHelpCommand(false);
@@ -279,8 +288,21 @@ if (process.argv.length <= 2) {
 }
 
 program.command('dock')
-  .description('Initialize Harbor config by auto-discovering services in your project')
-  .option('-p, --path <path>', 'The path to the root of your project', './')
+  .description(`Initialize a new Harbor project by scanning directories for services.
+
+WHEN TO USE: Run this first in a new project that has no harbor.json yet.
+
+WHAT IT DOES:
+  - Scans subdirectories for project files (package.json, go.mod, Cargo.toml, etc.)
+  - Creates harbor.json with discovered services
+  - Auto-detects run commands (npm run dev, go run ., etc.)
+
+PREREQUISITES: No existing harbor.json or harbor config in package.json.
+
+EXAMPLE:
+  harbor dock              # Scan current directory
+  harbor dock -p ./apps    # Scan specific subdirectory`)
+  .option('-p, --path <path>', 'Directory to scan for service projects (scans subdirectories)', './')
   .action(async (options) => {
     try {
       await checkDependencies();
@@ -303,8 +325,21 @@ program.command('dock')
   });
 
 program.command('moor')
-  .description('Scan for and add new services to your existing Harbor configuration')
-  .option('-p, --path <path>', 'The path to the root of your project', './')
+  .description(`Add newly discovered services to an existing Harbor configuration.
+
+WHEN TO USE: Run when you've added new service directories to your project.
+
+WHAT IT DOES:
+  - Scans for new project directories not already in config
+  - Adds them to existing harbor.json or package.json harbor config
+  - Skips directories already configured
+
+PREREQUISITES: Existing harbor.json or harbor config in package.json (run 'dock' first).
+
+EXAMPLE:
+  harbor moor              # Scan and add new services
+  harbor moor -p ./apps    # Scan specific subdirectory for new services`)
+  .option('-p, --path <path>', 'Directory to scan for new service projects', './')
   .action(async (options) => {
     try {
       await checkDependencies();
@@ -324,8 +359,29 @@ program.command('moor')
   });
 
 program.command('launch')
-  .description('Start all services in a tmux session with pre-stage commands')
-  .option('-d, --detach', 'Run services in background without attaching to tmux session')
+  .description(`Start all configured services in a tmux session.
+
+WHEN TO USE: Run to start your development environment.
+
+WHAT IT DOES:
+  - Kills any existing Harbor tmux session
+  - Runs 'before' scripts if configured
+  - Creates tmux session with a window per service
+  - Starts each service with its configured command
+  - Enables logging to .harbor/*.log if log:true in config
+  - Runs 'after' scripts when session ends
+
+MODES:
+  Interactive (default): Opens tmux session, use Shift+Left/Right to switch tabs
+  Headless (-d/--headless): Runs in background, use 'anchor' to attach later
+
+PREREQUISITES: harbor.json or harbor config in package.json.
+
+EXAMPLES:
+  harbor launch            # Start and attach to tmux session
+  harbor launch -d         # Start in background (headless mode)
+  harbor launch --headless # Same as -d`)
+  .option('-d, --detach', 'Run in background without attaching (headless mode). Use "anchor" to attach later.')
   .option('--headless', 'Alias for --detach')
   .action(async (options) => {
     try {
@@ -338,7 +394,21 @@ program.command('launch')
   });
 
 program.command('anchor')
-  .description('Anchor to a running Harbor tmux session')
+  .description(`Attach your terminal to a running Harbor tmux session.
+
+WHEN TO USE: After starting services with 'launch -d' (headless mode).
+
+WHAT IT DOES:
+  - Checks if a Harbor tmux session is running
+  - Attaches your terminal to it
+  - You can then switch between service tabs with Shift+Left/Right
+  - Press Ctrl+q to kill session, or detach with Ctrl+b then d
+
+PREREQUISITES: Services must be running (started with 'harbor launch').
+
+EXAMPLE:
+  harbor launch -d   # Start in background
+  harbor anchor      # Attach to see the services`)
   .action(async () => {
     try {
       const config = await readHarborConfig();
@@ -376,7 +446,19 @@ program.command('anchor')
   });
 
 program.command('scuttle')
-  .description('Scuttle all running Harbor services by killing the tmux session')
+  .description(`Stop all running Harbor services by killing the tmux session.
+
+WHEN TO USE: When you want to stop all services and free up resources.
+
+WHAT IT DOES:
+  - Finds the running Harbor tmux session
+  - Kills the entire session (all service windows)
+  - All services stop immediately
+
+SAFE TO RUN: If no session is running, it simply reports that and exits cleanly.
+
+EXAMPLE:
+  harbor scuttle   # Stop all services`)
   .action(async () => {
     try {
       const config = await readHarborConfig();
@@ -418,7 +500,27 @@ program.command('scuttle')
   });
 
 program.command('bearings')
-  .description('Get your bearings - show status of running Harbor services')
+  .description(`Show status of running Harbor services and session information.
+
+WHEN TO USE: To check if services are running, especially in headless mode.
+
+WHAT IT SHOWS:
+  - Session name and running status
+  - List of service windows (with 📄 indicator if logging enabled)
+  - Log file paths and sizes
+  - Available commands (anchor, scuttle)
+
+OUTPUT EXAMPLE:
+  ⚓ Harbor Status
+     Session:  harbor
+     Status:   Running ✓
+     Services: [0] Terminal, [1] web 📄, [2] api 📄
+     Logs:     .harbor/harbor-web.log (1.2 KB)
+
+SAFE TO RUN: Works whether services are running or not.
+
+EXAMPLE:
+  harbor bearings   # Check what's running`)
   .action(async () => {
     try {
       const config = await readHarborConfig();
