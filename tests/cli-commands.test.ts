@@ -89,6 +89,11 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('WHEN TO USE');
       expect(stdout).toContain('WHAT IT DOES');
     });
+
+    it('should show --name option', async () => {
+      const { stdout } = await runCLI(['anchor', '--help']);
+      expect(stdout).toContain('--name <name>');
+    });
   });
 
   describe('harbor scuttle --help', () => {
@@ -99,6 +104,11 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('WHEN TO USE');
       expect(stdout).toContain('WHAT IT DOES');
     });
+
+    it('should show --name option', async () => {
+      const { stdout } = await runCLI(['scuttle', '--help']);
+      expect(stdout).toContain('--name <name>');
+    });
   });
 
   describe('harbor bearings --help', () => {
@@ -107,6 +117,11 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('status');
       expect(stdout).toContain('WHEN TO USE');
       expect(stdout).toContain('WHAT IT SHOWS');
+    });
+
+    it('should show --name option', async () => {
+      const { stdout } = await runCLI(['bearings', '--help']);
+      expect(stdout).toContain('--name <name>');
     });
   });
 });

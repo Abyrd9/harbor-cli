@@ -408,13 +408,15 @@ WHAT IT DOES:
 
 PREREQUISITES: Services must be running (started with 'harbor launch').
 
-EXAMPLE:
-  harbor launch -d   # Start in background
-  harbor anchor      # Attach to see the services`)
-  .action(async () => {
+EXAMPLES:
+  harbor launch -d               # Start in background
+  harbor anchor                  # Attach to default session
+  harbor anchor --name my-app    # Attach to a specific named session`)
+  .option('--name <name>', 'Specify which tmux session to attach to (defaults to config sessionName or "harbor")')
+  .action(async (options) => {
     try {
       const config = await readHarborConfig();
-      const sessionName = config.sessionName || 'harbor';
+      const sessionName = options.name || config.sessionName || 'harbor';
       
       // Check if session exists
       const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
@@ -459,12 +461,14 @@ WHAT IT DOES:
 
 SAFE TO RUN: If no session is running, it simply reports that and exits cleanly.
 
-EXAMPLE:
-  harbor scuttle   # Stop all services`)
-  .action(async () => {
+EXAMPLES:
+  harbor scuttle                # Stop default session
+  harbor scuttle --name my-app  # Stop a specific named session`)
+  .option('--name <name>', 'Specify which tmux session to stop (defaults to config sessionName or "harbor")')
+  .action(async (options) => {
     try {
       const config = await readHarborConfig();
-      const sessionName = config.sessionName || 'harbor';
+      const sessionName = options.name || config.sessionName || 'harbor';
       
       // Check if session exists
       const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
@@ -521,12 +525,14 @@ OUTPUT EXAMPLE:
 
 SAFE TO RUN: Works whether services are running or not.
 
-EXAMPLE:
-  harbor bearings   # Check what's running`)
-  .action(async () => {
+EXAMPLES:
+  harbor bearings                # Check default session
+  harbor bearings --name my-app  # Check a specific named session`)
+  .option('--name <name>', 'Specify which tmux session to check (defaults to config sessionName or "harbor")')
+  .action(async (options) => {
     try {
       const config = await readHarborConfig();
-      const sessionName = config.sessionName || 'harbor';
+      const sessionName = options.name || config.sessionName || 'harbor';
       
       // Check if session exists
       const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
