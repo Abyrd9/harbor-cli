@@ -405,6 +405,7 @@ WHAT IT DOES:
   - Attaches your terminal to it
   - You can then switch between service tabs with Shift+Left/Right
   - Press Ctrl+q to kill session, or detach with Ctrl+b then d
+  - Runs any configured 'after' scripts if the session is killed
 
 PREREQUISITES: Services must be running (started with 'harbor launch').
 
@@ -440,7 +441,28 @@ EXAMPLES:
         stdio: 'inherit',
       });
       
-      attach.on('close', (code) => {
+      attach.on('close', async (code) => {
+        // Check if session was killed (vs just detached)
+        const checkAfter = spawn('tmux', ['has-session', '-t', sessionName], {
+          stdio: 'pipe',
+        });
+        
+        const sessionStillExists = await new Promise<boolean>((resolve) => {
+          checkAfter.on('close', (checkCode) => {
+            resolve(checkCode === 0);
+          });
+        });
+        
+        // If session no longer exists, it was killed - run after scripts
+        if (!sessionStillExists && config.after && config.after.length > 0) {
+          try {
+            await execute(config.after, 'after');
+          } catch {
+            console.error('❌ After scripts failed');
+            process.exit(1);
+          }
+        }
+        
         process.exit(code || 0);
       });
     } catch (err) {
@@ -458,6 +480,7 @@ WHAT IT DOES:
   - Finds the running Harbor tmux session
   - Kills the entire session (all service windows)
   - All services stop immediately
+  - Runs any configured 'after' scripts
 
 SAFE TO RUN: If no session is running, it simply reports that and exits cleanly.
 
@@ -491,9 +514,19 @@ EXAMPLES:
         stdio: 'inherit',
       });
       
-      killSession.on('close', (code) => {
+      killSession.on('close', async (code) => {
         if (code === 0) {
           console.log(`✅ Harbor session '${sessionName}' stopped`);
+          
+          // Execute after scripts when session is killed
+          if (config.after && config.after.length > 0) {
+            try {
+              await execute(config.after, 'after');
+            } catch {
+              console.error('❌ After scripts failed');
+              process.exit(1);
+            }
+          }
         } else {
           console.log('❌ Failed to stop Harbor session');
         }
@@ -955,14 +988,17 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
         process.exit(1);
       }
 
-      // Execute after scripts
-      try {
-        await execute(config.after || [], 'after');
-        resolve();
-      } catch {
-        console.error('❌ After scripts failed');
-        process.exit(1);
+      // Only execute after scripts in attached mode
+      // In headless mode, after scripts are run by 'scuttle' when session is killed
+      if (!options.detach) {
+        try {
+          await execute(config.after || [], 'after');
+        } catch {
+          console.error('❌ After scripts failed');
+          process.exit(1);
+        }
       }
+      resolve();
     });
   });
 }
