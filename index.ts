@@ -387,8 +387,19 @@ EXAMPLES:
   .option('--name <name>', 'Override tmux session name from config')
   .action(async (options) => {
     try {
+      const isDetached = options.detach || options.headless;
+      
+      // Check if already inside a tmux session (only matters for attached mode)
+      if (!isDetached && process.env.TMUX) {
+        console.log('❌ Cannot launch in attached mode from inside a tmux session');
+        console.log('\nOptions:');
+        console.log('  1. Use headless mode: harbor launch -d');
+        console.log('  2. Detach from current session (Ctrl+b then d) and try again');
+        process.exit(1);
+      }
+      
       await checkDependencies();
-      await runServices({ detach: options.detach || options.headless, name: options.name });
+      await runServices({ detach: isDetached, name: options.name });
     } catch (err) {
       console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
@@ -416,6 +427,15 @@ EXAMPLES:
   .option('--name <name>', 'Specify which tmux session to attach to (defaults to config sessionName or "harbor")')
   .action(async (options) => {
     try {
+      // Check if already inside a tmux session
+      if (process.env.TMUX) {
+        console.log('❌ Cannot anchor from inside a tmux session');
+        console.log('\nYou are already inside a tmux session. To attach to a Harbor session:');
+        console.log('  1. Detach from current session (Ctrl+b then d)');
+        console.log('  2. Run "harbor anchor" from a regular terminal');
+        process.exit(1);
+      }
+      
       const config = await readHarborConfig();
       const sessionName = options.name || config.sessionName || 'harbor';
       const socketName = `harbor-${sessionName}`;

@@ -229,3 +229,66 @@ describe('Detach Mode Environment Variable', () => {
   });
 });
 
+// Helper to run CLI with custom environment and timeout
+function runCLIWithEnv(
+  args: string[], 
+  env: Record<string, string>,
+  timeout = 10000
+): Promise<{ stdout: string; stderr: string; code: number }> {
+  return new Promise((resolve) => {
+    const proc = spawn('node', [CLI_PATH, ...args], {
+      env: { ...process.env, NO_COLOR: '1', ...env },
+    });
+    
+    let stdout = '';
+    let stderr = '';
+    
+    const timer = setTimeout(() => {
+      proc.kill();
+      resolve({ stdout, stderr, code: -1 });
+    }, timeout);
+    
+    proc.stdout.on('data', (data) => { stdout += data.toString(); });
+    proc.stderr.on('data', (data) => { stderr += data.toString(); });
+    
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ stdout, stderr, code: code || 0 });
+    });
+  });
+}
+
+describe('Tmux Session Detection', () => {
+  it('should block "harbor launch" (attached mode) when inside tmux', async () => {
+    const { stdout, code } = await runCLIWithEnv(['launch'], { TMUX: '/tmp/tmux-501/default,12345,0' });
+    
+    expect(code).toBe(1);
+    expect(stdout).toContain('Cannot launch in attached mode from inside a tmux session');
+    expect(stdout).toContain('harbor launch -d');
+  });
+
+  it('should block "harbor anchor" when inside tmux', async () => {
+    const { stdout, code } = await runCLIWithEnv(['anchor'], { TMUX: '/tmp/tmux-501/default,12345,0' });
+    
+    expect(code).toBe(1);
+    expect(stdout).toContain('Cannot anchor from inside a tmux session');
+    expect(stdout).toContain('Detach from current session');
+  });
+
+  it('should allow "harbor launch -d" (headless mode) when inside tmux', async () => {
+    // This test just verifies the command doesn't exit with the tmux blocking error
+    // It will fail for other reasons (no config) but that's expected
+    const { stdout } = await runCLIWithEnv(['launch', '-d'], { TMUX: '/tmp/tmux-501/default,12345,0' }, 2000);
+    
+    // Should NOT contain the tmux blocking message - headless mode is allowed inside tmux
+    expect(stdout).not.toContain('Cannot launch in attached mode from inside a tmux session');
+  });
+
+  it('should allow "harbor launch --headless" when inside tmux', async () => {
+    const { stdout } = await runCLIWithEnv(['launch', '--headless'], { TMUX: '/tmp/tmux-501/default,12345,0' }, 2000);
+    
+    // Should NOT contain the tmux blocking message - headless mode is allowed inside tmux
+    expect(stdout).not.toContain('Cannot launch in attached mode from inside a tmux session');
+  });
+});
+
