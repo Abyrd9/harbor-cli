@@ -380,13 +380,15 @@ PREREQUISITES: harbor.json or harbor config in package.json.
 EXAMPLES:
   harbor launch            # Start and attach to tmux session
   harbor launch -d         # Start in background (headless mode)
-  harbor launch --headless # Same as -d`)
+  harbor launch --headless # Same as -d
+  harbor launch --name my-session # Use custom session name`)
   .option('-d, --detach', 'Run in background without attaching (headless mode). Use "anchor" to attach later.')
   .option('--headless', 'Alias for --detach')
+  .option('--name <name>', 'Override tmux session name from config')
   .action(async (options) => {
     try {
       await checkDependencies();
-      await runServices({ detach: options.detach || options.headless });
+      await runServices({ detach: options.detach || options.headless, name: options.name });
     } catch (err) {
       console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
@@ -882,6 +884,7 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
 
 interface RunServicesOptions {
   detach?: boolean;
+  name?: string;
 }
 
 async function runServices(options: RunServicesOptions = {}): Promise<void> {
@@ -926,6 +929,7 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
   const env = {
     ...process.env,
     HARBOR_DETACH: options.detach ? '1' : '0',
+    HARBOR_SESSION_NAME: options.name || '',
   };
   
   const command = spawn('bash', [scriptPath], {

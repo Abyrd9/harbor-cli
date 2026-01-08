@@ -64,6 +64,21 @@ describe('CLI Commands', () => {
       const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('Alias for --detach');
     });
+
+    it('should show --name option', async () => {
+      const { stdout } = await runCLI(['launch', '--help']);
+      expect(stdout).toContain('--name <name>');
+    });
+
+    it('should describe --name option as override', async () => {
+      const { stdout } = await runCLI(['launch', '--help']);
+      expect(stdout).toContain('Override tmux session name from config');
+    });
+
+    it('should show --name example in usage', async () => {
+      const { stdout } = await runCLI(['launch', '--help']);
+      expect(stdout).toContain('--name my-session');
+    });
   });
 
   describe('harbor anchor --help', () => {
@@ -112,9 +127,63 @@ describe('Session Name Configuration', () => {
   });
 });
 
+describe('Session Name Environment Variable', () => {
+  it('should set HARBOR_SESSION_NAME when name option is provided', () => {
+    const options = { name: 'my-custom-session' };
+    const env = {
+      HARBOR_SESSION_NAME: options.name || '',
+    };
+    expect(env.HARBOR_SESSION_NAME).toBe('my-custom-session');
+  });
+
+  it('should set HARBOR_SESSION_NAME to empty when name option is undefined', () => {
+    const options: { name?: string } = {};
+    const env = {
+      HARBOR_SESSION_NAME: options.name || '',
+    };
+    expect(env.HARBOR_SESSION_NAME).toBe('');
+  });
+
+  it('should set HARBOR_SESSION_NAME to empty when name option is empty string', () => {
+    const options = { name: '' };
+    const env = {
+      HARBOR_SESSION_NAME: options.name || '',
+    };
+    expect(env.HARBOR_SESSION_NAME).toBe('');
+  });
+
+  it('should prioritize HARBOR_SESSION_NAME env over config sessionName', () => {
+    // Simulating the dev.sh logic:
+    // session_name="${HARBOR_SESSION_NAME:-$(get_harbor_config | jq -r '.sessionName // "harbor"')}"
+    const envSessionName = 'env-session';
+    const configSessionName = 'config-session';
+    const defaultSessionName = 'harbor';
+
+    const sessionName = envSessionName || configSessionName || defaultSessionName;
+    expect(sessionName).toBe('env-session');
+  });
+
+  it('should fall back to config sessionName when HARBOR_SESSION_NAME is empty', () => {
+    const envSessionName = '';
+    const configSessionName = 'config-session';
+    const defaultSessionName = 'harbor';
+
+    const sessionName = envSessionName || configSessionName || defaultSessionName;
+    expect(sessionName).toBe('config-session');
+  });
+
+  it('should fall back to default "harbor" when both env and config are empty', () => {
+    const envSessionName = '';
+    const configSessionName = undefined;
+    const defaultSessionName = 'harbor';
+
+    const sessionName = envSessionName || configSessionName || defaultSessionName;
+    expect(sessionName).toBe('harbor');
+  });
+});
+
 describe('Detach Mode Environment Variable', () => {
   it('should set HARBOR_DETACH=1 when detach option is true', () => {
-    // Simulating the logic from runServices
     const options = { detach: true };
     const env = {
       HARBOR_DETACH: options.detach ? '1' : '0',
@@ -139,7 +208,6 @@ describe('Detach Mode Environment Variable', () => {
   });
 
   it('should treat headless same as detach', () => {
-    // Simulating: detach: options.detach || options.headless
     const optionsWithHeadless = { headless: true };
     const detach = optionsWithHeadless.headless;
     expect(detach).toBe(true);

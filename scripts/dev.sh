@@ -11,8 +11,8 @@ get_harbor_config() {
     fi
 }
 
-# Get session name from config or use default
-session_name=$(get_harbor_config | jq -r '.sessionName // "harbor"')
+# Get session name from env, config, or use default
+session_name="${HARBOR_SESSION_NAME:-$(get_harbor_config | jq -r '.sessionName // "harbor"')}"
 
 # Check if the session already exists and kill it
 if tmux has-session -t "$session_name" 2>/dev/null; then
