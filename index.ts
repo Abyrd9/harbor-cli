@@ -9,6 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import readline from 'node:readline';
+import pc from 'picocolors';
 
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
@@ -247,62 +248,74 @@ const possibleProjectFiles = [
 
 const program = new Command();
 
+// Custom help formatting
+function showCustomHelp() {
+  const dim = pc.dim;
+  const bold = pc.bold;
+  const cyan = pc.cyan;
+  const yellow = pc.yellow;
+  const green = pc.green;
+  
+  console.log(`
+${bold('⚓ Harbor')} ${dim(`v${packageJson.version}`)}
+${dim('Orchestrate local dev services in tmux')}
+
+${yellow('Usage:')}
+  ${dim('$')} harbor ${cyan('<command>')} ${dim('[options]')}
+
+${yellow('Commands:')}
+  ${green('dock')}       Scan directories and create harbor.json config
+  ${green('moor')}       Add new services to existing config
+  ${green('launch')}     Start all services in tmux ${dim('(-d for headless)')}
+  ${green('anchor')}     Attach to a running Harbor session
+  ${green('scuttle')}    Stop all services
+  ${green('bearings')}   Show status of running services
+
+${yellow('Quick Start:')}
+  ${dim('$')} harbor dock            ${dim('# Create config')}
+  ${dim('$')} harbor launch          ${dim('# Start services')}
+  ${dim('$')} harbor launch -d       ${dim('# Start headless')}
+
+${yellow('Options:')}
+  ${cyan('-V, --version')}   Show version
+  ${cyan('-h, --help')}      Show help for command
+
+${dim('Run')} harbor ${cyan('<command>')} --help ${dim('for detailed command info')}
+`);
+}
+
 program
   .name('harbor')
-  .description(`A CLI tool for orchestrating multiple local development services in tmux.
-
-WHAT IT DOES:
-  Harbor manages multiple services (APIs, frontends, databases) in a single tmux 
-  session. It auto-discovers projects, starts them together, and provides logging.
-
-REQUIREMENTS:
-  - tmux (terminal multiplexer)
-  - jq (JSON processor)
-
-TYPICAL WORKFLOW:
-  1. harbor dock          # First time: scan and create harbor.json config
-  2. harbor launch        # Start all services in interactive tmux session
-     harbor launch -d     # Or start in headless/background mode
-  3. harbor bearings      # Check status of running services
-  4. harbor anchor        # Attach to running session (if headless)
-  5. harbor scuttle       # Stop all services when done
-
-CONFIGURATION:
-  Config is stored in harbor.json or package.json under "harbor" key.
-  Services can specify: name, path, command, log (boolean), maxLogLines.
-
-COMMANDS:
-  dock      Create new harbor.json by scanning for projects (package.json, go.mod, etc.)
-  moor      Add newly discovered services to existing config
-  launch    Start all configured services (use -d/--headless for background mode)
-  bearings  Show status: running services, session info, log file locations
-  anchor    Attach terminal to a running Harbor tmux session
-  scuttle   Stop all services by killing the tmux session`)
+  .description('Orchestrate local dev services in tmux')
   .version(packageJson.version)
   .action(async () => await checkDependencies())
-  .addHelpCommand(false);
+  .addHelpCommand(false)
+  .configureHelp({
+    sortSubcommands: false,
+    sortOptions: false,
+  });
 
-// If no command is provided, display help
+// Override help display
+program.helpInformation = () => '';
+program.on('--help', () => {});
+
+// If no command is provided, display custom help
 if (process.argv.length <= 2) {
-  program.help();
+  showCustomHelp();
+  process.exit(0);
+}
+
+// Handle -h and --help for main command
+if (process.argv.includes('-h') || process.argv.includes('--help')) {
+  if (process.argv.length === 3) {
+    showCustomHelp();
+    process.exit(0);
+  }
 }
 
 program.command('dock')
-  .description(`Initialize a new Harbor project by scanning directories for services.
-
-WHEN TO USE: Run this first in a new project that has no harbor.json yet.
-
-WHAT IT DOES:
-  - Scans subdirectories for project files (package.json, go.mod, Cargo.toml, etc.)
-  - Creates harbor.json with discovered services
-  - Auto-detects run commands (npm run dev, go run ., etc.)
-
-PREREQUISITES: No existing harbor.json or harbor config in package.json.
-
-EXAMPLE:
-  harbor dock              # Scan current directory
-  harbor dock -p ./apps    # Scan specific subdirectory`)
-  .option('-p, --path <path>', 'Directory to scan for service projects (scans subdirectories)', './')
+  .description('Scan directories and create harbor.json config')
+  .option('-p, --path <path>', 'Directory to scan for service projects', './')
   .action(async (options) => {
     try {
       await checkDependencies();
@@ -325,20 +338,7 @@ EXAMPLE:
   });
 
 program.command('moor')
-  .description(`Add newly discovered services to an existing Harbor configuration.
-
-WHEN TO USE: Run when you've added new service directories to your project.
-
-WHAT IT DOES:
-  - Scans for new project directories not already in config
-  - Adds them to existing harbor.json or package.json harbor config
-  - Skips directories already configured
-
-PREREQUISITES: Existing harbor.json or harbor config in package.json (run 'dock' first).
-
-EXAMPLE:
-  harbor moor              # Scan and add new services
-  harbor moor -p ./apps    # Scan specific subdirectory for new services`)
+  .description('Add new services to existing config')
   .option('-p, --path <path>', 'Directory to scan for new service projects', './')
   .action(async (options) => {
     try {
@@ -359,32 +359,10 @@ EXAMPLE:
   });
 
 program.command('launch')
-  .description(`Start all configured services in a tmux session.
-
-WHEN TO USE: Run to start your development environment.
-
-WHAT IT DOES:
-  - Kills any existing Harbor tmux session
-  - Runs 'before' scripts if configured
-  - Creates tmux session with a window per service
-  - Starts each service with its configured command
-  - Enables logging to .harbor/*.log if log:true in config
-  - Runs 'after' scripts when session ends
-
-MODES:
-  Interactive (default): Opens tmux session, use Shift+Left/Right to switch tabs
-  Headless (-d/--headless): Runs in background, use 'anchor' to attach later
-
-PREREQUISITES: harbor.json or harbor config in package.json.
-
-EXAMPLES:
-  harbor launch            # Start and attach to tmux session
-  harbor launch -d         # Start in background (headless mode)
-  harbor launch --headless # Same as -d
-  harbor launch --name my-session # Use custom session name`)
-  .option('-d, --detach', 'Run in background without attaching (headless mode). Use "anchor" to attach later.')
+  .description('Start all services in tmux (-d for headless)')
+  .option('-d, --detach', 'Run in background (headless mode)')
   .option('--headless', 'Alias for --detach')
-  .option('--name <name>', 'Override tmux session name from config')
+  .option('--name <name>', 'Override tmux session name')
   .action(async (options) => {
     try {
       const isDetached = options.detach || options.headless;
@@ -407,24 +385,8 @@ EXAMPLES:
   });
 
 program.command('anchor')
-  .description(`Attach your terminal to a running Harbor tmux session.
-
-WHEN TO USE: After starting services with 'launch -d' (headless mode).
-
-WHAT IT DOES:
-  - Checks if a Harbor tmux session is running
-  - Attaches your terminal to it
-  - You can then switch between service tabs with Shift+Left/Right
-  - Press Ctrl+q to kill session, or detach with Ctrl+b then d
-  - Runs any configured 'after' scripts if the session is killed
-
-PREREQUISITES: Services must be running (started with 'harbor launch').
-
-EXAMPLES:
-  harbor launch -d               # Start in background
-  harbor anchor                  # Attach to default session
-  harbor anchor --name my-app    # Attach to a specific named session`)
-  .option('--name <name>', 'Specify which tmux session to attach to (defaults to config sessionName or "harbor")')
+  .description('Attach to a running Harbor session')
+  .option('--name <name>', 'Session name to attach to')
   .action(async (options) => {
     try {
       // Check if already inside a tmux session
@@ -493,22 +455,8 @@ EXAMPLES:
   });
 
 program.command('scuttle')
-  .description(`Stop all running Harbor services by killing the tmux session.
-
-WHEN TO USE: When you want to stop all services and free up resources.
-
-WHAT IT DOES:
-  - Finds the running Harbor tmux session
-  - Kills the entire session (all service windows)
-  - All services stop immediately
-  - Runs any configured 'after' scripts
-
-SAFE TO RUN: If no session is running, it simply reports that and exits cleanly.
-
-EXAMPLES:
-  harbor scuttle                # Stop default session
-  harbor scuttle --name my-app  # Stop a specific named session`)
-  .option('--name <name>', 'Specify which tmux session to stop (defaults to config sessionName or "harbor")')
+  .description('Stop all services and kill the session')
+  .option('--name <name>', 'Session name to stop')
   .action(async (options) => {
     try {
       const config = await readHarborConfig();
@@ -561,29 +509,8 @@ EXAMPLES:
   });
 
 program.command('bearings')
-  .description(`Show status of running Harbor services and session information.
-
-WHEN TO USE: To check if services are running, especially in headless mode.
-
-WHAT IT SHOWS:
-  - Session name and running status
-  - List of service windows (with 📄 indicator if logging enabled)
-  - Log file paths and sizes
-  - Available commands (anchor, scuttle)
-
-OUTPUT EXAMPLE:
-  ⚓ Harbor Status
-     Session:  harbor
-     Status:   Running ✓
-     Services: [0] Terminal, [1] web 📄, [2] api 📄
-     Logs:     .harbor/harbor-web.log (1.2 KB)
-
-SAFE TO RUN: Works whether services are running or not.
-
-EXAMPLES:
-  harbor bearings                # Check default session
-  harbor bearings --name my-app  # Check a specific named session`)
-  .option('--name <name>', 'Specify which tmux session to check (defaults to config sessionName or "harbor")')
+  .description('Show status of running services')
+  .option('--name <name>', 'Session name to check')
   .action(async (options) => {
     try {
       const config = await readHarborConfig();

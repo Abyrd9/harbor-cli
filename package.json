@@ -42,7 +42,8 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0"
+    "@commander-js/extra-typings": "^14.0.0",
+    "picocolors": "^1.1.1"
   },
   "devDependencies": {
     "@types/node": "^24.0.3",

@@ -41,10 +41,10 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('-V, --version');
     });
 
-    it('should show workflow and requirements', async () => {
+    it('should show quick start and commands', async () => {
       const { stdout } = await runCLI(['--help']);
-      expect(stdout).toContain('TYPICAL WORKFLOW');
-      expect(stdout).toContain('REQUIREMENTS');
+      expect(stdout).toContain('Quick Start');
+      expect(stdout).toContain('Commands');
       expect(stdout).toContain('headless');
     });
   });
@@ -70,24 +70,17 @@ describe('CLI Commands', () => {
       expect(stdout).toContain('--name <name>');
     });
 
-    it('should describe --name option as override', async () => {
+    it('should describe --name option', async () => {
       const { stdout } = await runCLI(['launch', '--help']);
-      expect(stdout).toContain('Override tmux session name from config');
-    });
-
-    it('should show --name example in usage', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
-      expect(stdout).toContain('--name my-session');
+      expect(stdout).toContain('Override tmux session name');
     });
   });
 
   describe('harbor anchor --help', () => {
-    it('should describe anchoring to tmux session', async () => {
+    it('should describe anchoring to session', async () => {
       const { stdout } = await runCLI(['anchor', '--help']);
       expect(stdout).toContain('Attach');
-      expect(stdout).toContain('tmux');
-      expect(stdout).toContain('WHEN TO USE');
-      expect(stdout).toContain('WHAT IT DOES');
+      expect(stdout).toContain('Harbor session');
     });
 
     it('should show --name option', async () => {
@@ -97,12 +90,10 @@ describe('CLI Commands', () => {
   });
 
   describe('harbor scuttle --help', () => {
-    it('should describe scuttling services', async () => {
+    it('should describe stopping services', async () => {
       const { stdout } = await runCLI(['scuttle', '--help']);
       expect(stdout).toContain('Stop');
-      expect(stdout).toContain('killing');
-      expect(stdout).toContain('WHEN TO USE');
-      expect(stdout).toContain('WHAT IT DOES');
+      expect(stdout).toContain('kill');
     });
 
     it('should show --name option', async () => {
@@ -115,8 +106,7 @@ describe('CLI Commands', () => {
     it('should describe showing status', async () => {
       const { stdout } = await runCLI(['bearings', '--help']);
       expect(stdout).toContain('status');
-      expect(stdout).toContain('WHEN TO USE');
-      expect(stdout).toContain('WHAT IT SHOWS');
+      expect(stdout).toContain('services');
     });
 
     it('should show --name option', async () => {
