@@ -11,6 +11,20 @@ import os from 'node:os';
 import readline from 'node:readline';
 import pc from 'picocolors';
 
+// Colored output helpers
+const log = {
+  error: (msg: string) => console.log(`${pc.red('✗')} ${msg}`),
+  success: (msg: string) => console.log(`${pc.green('✓')} ${msg}`),
+  info: (msg: string) => console.log(`${pc.blue('ℹ')} ${msg}`),
+  warn: (msg: string) => console.log(`${pc.yellow('⚠')} ${msg}`),
+  step: (msg: string) => console.log(`${pc.cyan('→')} ${msg}`),
+  dim: (msg: string) => console.log(pc.dim(msg)),
+  plain: (msg: string) => console.log(msg),
+  header: (msg: string) => console.log(`\n${pc.bold(msg)}`),
+  cmd: (msg: string) => console.log(`  ${pc.dim('$')} ${pc.cyan(msg)}`),
+  label: (label: string, value: string) => console.log(`   ${pc.dim(label)}  ${value}`),
+};
+
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -162,22 +176,22 @@ async function checkDependencies(): Promise<void> {
   }
 
   if (missingDeps.length > 0) {
-    console.log('❌ Missing required dependencies:');
-    console.log(`\n🖥️  Detected OS: ${osInfo.platform} ${osInfo.arch}${osInfo.isWSL ? ' (WSL)' : ''}`);
+    log.error('Missing required dependencies');
+    log.plain(`\n${pc.dim('Detected OS:')} ${osInfo.platform} ${osInfo.arch}${osInfo.isWSL ? ' (WSL)' : ''}`);
     
     for (const dep of missingDeps) {
-      console.log(`\n📦 ${dep.name} (required for ${dep.requiredFor})`);
+      log.plain(`\n${pc.yellow(dep.name)} ${pc.dim(`(required for ${dep.requiredFor})`)}`);
       
       const instructions = getInstallInstructions(dep.name, osInfo);
       if (instructions.length > 0) {
-        console.log('   Installation options:');
-        instructions.forEach(instruction => { console.log(instruction); });
+        log.plain(pc.dim('   Installation options:'));
+        instructions.forEach(instruction => { log.plain(instruction); });
       } else {
-        console.log(`   General instructions: ${dep.installMsg}`);
+        log.plain(`   ${pc.dim('Instructions:')} ${dep.installMsg}`);
       }
     }
     
-    console.log('\n💡 After installing the dependencies, run Harbor again.');
+    log.plain(`\n${pc.dim('After installing dependencies, run Harbor again.')}`);
     throw new Error('Please install missing dependencies before continuing');
   }
 }
@@ -211,12 +225,12 @@ function promptConfigLocation(): Promise<ConfigLocation> {
   });
 
   return new Promise((resolve) => {
-    console.log('\nFound package.json. Where would you like to store harbor config?');
-    console.log('  1. package.json (keeps everything in one place)');
-    console.log('  2. harbor.json (separate config file, auto-IntelliSense)\n');
+    log.plain(`\n${pc.bold('Found package.json.')} Where would you like to store harbor config?`);
+    log.plain(`  ${pc.cyan('1.')} package.json ${pc.dim('(keeps everything in one place)')}`);
+    log.plain(`  ${pc.cyan('2.')} harbor.json ${pc.dim('(separate config file, auto-IntelliSense)')}\n`);
 
     const ask = () => {
-      rl.question('Enter choice (1 or 2): ', (answer) => {
+      rl.question(`Enter choice ${pc.dim('(1 or 2)')}: `, (answer) => {
         const choice = answer.trim();
         if (choice === '1') {
           rl.close();
@@ -225,7 +239,7 @@ function promptConfigLocation(): Promise<ConfigLocation> {
           rl.close();
           resolve('harbor.json');
         } else {
-          console.log('Please enter 1 or 2');
+          log.warn('Please enter 1 or 2');
           ask();
         }
       });
@@ -323,16 +337,18 @@ program.command('dock')
       const configExists = checkHasHarborConfig();
 
       if (configExists) {
-        console.log('❌ Error: Harbor project already initialized');
-        console.log('   - Harbor configuration already exists');
-        console.log('\nTo reinitialize, please remove the configuration first.');
+        log.error('Harbor project already initialized');
+        log.dim('   Configuration already exists');
+        log.plain('');
+        log.info('To reinitialize, remove the existing configuration first.');
         process.exit(1);
       }
 
       await generateDevFile(options.path);
-      console.log('✨ Environment prepared!');
+      log.plain('');
+      log.success(pc.green('Environment prepared!'));
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -345,15 +361,16 @@ program.command('moor')
       await checkDependencies();
       
       if (!checkHasHarborConfig()) {
-        console.log('❌ No harbor configuration found');
-        console.log('\nTo initialize a new Harbor project, please use:');
-        console.log('  harbor dock');
+        log.error('No harbor configuration found');
+        log.plain('');
+        log.info('To initialize a new Harbor project:');
+        log.cmd('harbor dock');
         process.exit(1);
       }
       
       await generateDevFile(options.path);
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -369,17 +386,18 @@ program.command('launch')
       
       // Check if already inside a tmux session (only matters for attached mode)
       if (!isDetached && process.env.TMUX) {
-        console.log('❌ Cannot launch in attached mode from inside a tmux session');
-        console.log('\nOptions:');
-        console.log('  1. Use headless mode: harbor launch -d');
-        console.log('  2. Detach from current session (Ctrl+b then d) and try again');
+        log.error('Cannot launch in attached mode from inside a tmux session');
+        log.plain('');
+        log.info('Options:');
+        log.plain(`   ${pc.cyan('1.')} Use headless mode: ${pc.cyan('harbor launch -d')}`);
+        log.plain(`   ${pc.cyan('2.')} Detach from current session ${pc.dim('(Ctrl+b then d)')} and try again`);
         process.exit(1);
       }
       
       await checkDependencies();
       await runServices({ detach: isDetached, name: options.name });
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -391,10 +409,11 @@ program.command('anchor')
     try {
       // Check if already inside a tmux session
       if (process.env.TMUX) {
-        console.log('❌ Cannot anchor from inside a tmux session');
-        console.log('\nYou are already inside a tmux session. To attach to a Harbor session:');
-        console.log('  1. Detach from current session (Ctrl+b then d)');
-        console.log('  2. Run "harbor anchor" from a regular terminal');
+        log.error('Cannot anchor from inside a tmux session');
+        log.plain('');
+        log.info('You are already inside a tmux session. To attach:');
+        log.plain(`   ${pc.cyan('1.')} Detach from current session ${pc.dim('(Ctrl+b then d)')}`);
+        log.plain(`   ${pc.cyan('2.')} Run ${pc.cyan('harbor anchor')} from a regular terminal`);
         process.exit(1);
       }
       
@@ -410,9 +429,10 @@ program.command('anchor')
       await new Promise<void>((resolve) => {
         checkSession.on('close', (code) => {
           if (code !== 0) {
-            console.log(`❌ No running Harbor session found (looking for: ${sessionName})`);
-            console.log('\nTo start services, run:');
-            console.log('  harbor launch');
+            log.error(`No running Harbor session found ${pc.dim(`(looking for: ${sessionName})`)}`);
+            log.plain('');
+            log.info('To start services:');
+            log.cmd('harbor launch');
             process.exit(1);
           }
           resolve();
@@ -441,7 +461,7 @@ program.command('anchor')
           try {
             await execute(config.after, 'after');
           } catch {
-            console.error('❌ After scripts failed');
+            log.error('After scripts failed');
             process.exit(1);
           }
         }
@@ -449,7 +469,7 @@ program.command('anchor')
         process.exit(code || 0);
       });
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -475,7 +495,7 @@ program.command('scuttle')
       });
       
       if (!sessionExists) {
-        console.log(`ℹ️  No running Harbor session found (looking for: ${sessionName})`);
+        log.info(`No running Harbor session found ${pc.dim(`(looking for: ${sessionName})`)}`);
         process.exit(0);
       }
       
@@ -486,24 +506,24 @@ program.command('scuttle')
       
       killSession.on('close', async (code) => {
         if (code === 0) {
-          console.log(`✅ Harbor session '${sessionName}' stopped`);
+          log.success(`Harbor session ${pc.cyan(sessionName)} stopped`);
           
           // Execute after scripts when session is killed
           if (config.after && config.after.length > 0) {
             try {
               await execute(config.after, 'after');
             } catch {
-              console.error('❌ After scripts failed');
+              log.error('After scripts failed');
               process.exit(1);
             }
           }
         } else {
-          console.log('❌ Failed to stop Harbor session');
+          log.error('Failed to stop Harbor session');
         }
         process.exit(code || 0);
       });
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -529,12 +549,15 @@ program.command('bearings')
       });
       
       if (!sessionExists) {
-        console.log(`\n⚓ Harbor Status\n`);
-        console.log(`   Session:  ${sessionName}`);
-        console.log(`   Status:   Not running\n`);
-        console.log(`   To start services, run:`);
-        console.log(`     harbor launch         # interactive mode`);
-        console.log(`     harbor launch -d      # headless mode\n`);
+        log.header(`${pc.cyan('⚓')} Harbor Status`);
+        log.plain('');
+        log.label('Session:', sessionName);
+        log.label('Status:', pc.yellow('Not running'));
+        log.plain('');
+        log.info('To start services:');
+        log.cmd(`harbor launch         ${pc.dim('# interactive mode')}`);
+        log.cmd(`harbor launch -d      ${pc.dim('# headless mode')}`);
+        log.plain('');
         process.exit(0);
       }
       
@@ -554,18 +577,20 @@ program.command('bearings')
       
       const windows = windowOutput.trim().split('\n').filter(Boolean);
       
-      console.log(`\n⚓ Harbor Status\n`);
-      console.log(`   Session:  ${sessionName}`);
-      console.log(`   Status:   Running ✓`);
-      console.log(`   Windows:  ${windows.length}\n`);
+      log.header(`${pc.cyan('⚓')} Harbor Status`);
+      log.plain('');
+      log.label('Session:', sessionName);
+      log.label('Status:', pc.green('Running ✓'));
+      log.label('Windows:', String(windows.length));
+      log.plain('');
       
-      console.log(`   Services:`);
+      log.plain(`   ${pc.dim('Services:')}`);
       for (const window of windows) {
-        const [index, name, cmd] = window.split('|');
+        const [index, name] = window.split('|');
         const logFile = `.harbor/${sessionName}-${name}.log`;
         const hasLog = fs.existsSync(path.join(process.cwd(), logFile));
-        const logIndicator = hasLog ? ` 📄` : '';
-        console.log(`     [${index}] ${name}${logIndicator}`);
+        const logIndicator = hasLog ? pc.dim(' 📄') : '';
+        log.plain(`     ${pc.dim(`[${index}]`)} ${pc.cyan(name)}${logIndicator}`);
       }
       
       // Check for log files
@@ -573,22 +598,25 @@ program.command('bearings')
       if (fs.existsSync(harborDir)) {
         const logFiles = fs.readdirSync(harborDir).filter(f => f.endsWith('.log'));
         if (logFiles.length > 0) {
-          console.log(`\n   Logs:`);
+          log.plain('');
+          log.plain(`   ${pc.dim('Logs:')}`);
           for (const logFile of logFiles) {
             const logPath = path.join(harborDir, logFile);
             const stats = fs.statSync(logPath);
             const sizeKB = (stats.size / 1024).toFixed(1);
-            console.log(`     .harbor/${logFile} (${sizeKB} KB)`);
+            log.plain(`     ${pc.dim(`.harbor/${logFile}`)} ${pc.dim(`(${sizeKB} KB)`)}`);
           }
         }
       }
       
-      console.log(`\n   Commands:`);
-      console.log(`     harbor anchor   - Anchor to the session`);
-      console.log(`     harbor scuttle  - Stop all services\n`);
+      log.plain('');
+      log.plain(`   ${pc.dim('Commands:')}`);
+      log.plain(`     ${pc.cyan('harbor anchor')}   ${pc.dim('Attach to the session')}`);
+      log.plain(`     ${pc.cyan('harbor scuttle')}  ${pc.dim('Stop all services')}`);
+      log.plain('');
       
     } catch (err) {
-      console.log('❌ Error:', err instanceof Error ? err.message : 'Unknown error');
+      log.error(err instanceof Error ? err.message : 'Unknown error');
       process.exit(1);
     }
   });
@@ -669,7 +697,7 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
     try {
       const existing = await fs.promises.readFile('harbor.json', 'utf-8');
       config = JSON.parse(existing);
-      console.log('Found existing harbor.json, scanning for new services...');
+      log.info('Found existing harbor.json, scanning for new services...');
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw new Error(`Error reading harbor.json: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -684,7 +712,7 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
           // Existing harbor config in package.json, use it
           config = packageJson.harbor;
           writeToPackageJson = true;
-          console.log('Found existing harbor config in package.json, scanning for new services...');
+          log.info('Found existing harbor config in package.json, scanning for new services...');
         } else {
           // package.json exists but no harbor config - ask user where to store it
           const choice = await promptConfigLocation();
@@ -694,7 +722,7 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
             before: [],
             after: [],
           };
-          console.log(`Creating new harbor config in ${choice}...`);
+          log.step(`Creating new harbor config in ${pc.cyan(choice)}...`);
         }
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -704,7 +732,7 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         config = {
           services: [],
         };
-        console.log('Creating new harbor.json...');
+        log.step(`Creating new ${pc.cyan('harbor.json')}...`);
       }
     }
 
@@ -733,18 +761,18 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
           }
 
           config.services.push(service);
-          console.log(`Added new service: ${folder.name}`);
+          log.success(`Added service: ${pc.green(folder.name)}`);
           newServicesAdded = true;
         } else if (existing.has(folder.name)) {
-          console.log(`Skipping existing service: ${folder.name}`);
+          log.dim(`  Skipping existing service: ${folder.name}`);
         } else {
-          console.log(`Skipping directory ${folder.name} (no recognized project files)`);
+          log.dim(`  Skipping directory ${folder.name} (no recognized project files)`);
         }
       }
     }
 
     if (!newServicesAdded) {
-      console.log('No new services found to add, feel free to add them manually');
+      log.info('No new services found to add, feel free to add them manually');
     }
 
     const validationError = validateConfig(config);
@@ -762,15 +790,15 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         JSON.stringify(packageJson, null, 2),
         'utf-8'
       );
-      console.log('\npackage.json updated successfully with harbor configuration');
-      console.log('\n💡 Tip: To enable IntelliSense for the harbor config in package.json,');
-      console.log('   add this to your .vscode/settings.json:');
-      console.log('   {');
-      console.log('     "json.schemas": [{');
-      console.log('       "fileMatch": ["package.json"],');
-      console.log('       "url": "https://raw.githubusercontent.com/Abyrd9/harbor-cli/main/harbor.package-json.schema.json"');
-      console.log('     }]');
-      console.log('   }');
+      log.success(`${pc.cyan('package.json')} updated with harbor configuration`);
+      log.plain('');
+      log.info(`${pc.dim('Tip:')} To enable IntelliSense, add this to ${pc.cyan('.vscode/settings.json')}:`);
+      log.plain(pc.dim('   {'));
+      log.plain(pc.dim('     "json.schemas": [{'));
+      log.plain(pc.dim('       "fileMatch": ["package.json"],'));
+      log.plain(pc.dim('       "url": "https://raw.githubusercontent.com/Abyrd9/harbor-cli/main/harbor.package-json.schema.json"'));
+      log.plain(pc.dim('     }]'));
+      log.plain(pc.dim('   }'));
     } else {
       // Write to harbor.json with $schema for IntelliSense
       const configWithSchema = {
@@ -782,11 +810,11 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
         JSON.stringify(configWithSchema, null, 2),
         'utf-8'
       );
-      console.log('\nharbor.json created successfully');
+      log.success(`${pc.cyan('harbor.json')} created successfully`);
     }
 
-    console.log('\nImportant:');
-    console.log('  - Verify the auto-detected commands are correct for your services');
+    log.plain('');
+    log.info(`${pc.dim('Important:')} Verify the auto-detected commands are correct for your services`);
     return true;
   } catch (err) {
     throw new Error(`Error processing directory: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -836,12 +864,13 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
     return;
   }
 
-  console.log(`\n🚀 Executing ${scriptType} scripts...`);
+  log.header(`Running ${scriptType} scripts...`);
 
   for (let i = 0; i < scripts.length; i++) {
     const script = scripts[i];
-    console.log(`\n📋 Running ${scriptType} script ${i + 1}/${scripts.length}: ${script.command}`);
-    console.log(`   📁 In directory: ${script.path}`);
+    log.plain('');
+    log.step(`${pc.dim(`[${i + 1}/${scripts.length}]`)} ${pc.cyan(script.command)}`);
+    log.dim(`   in ${script.path}`);
 
     try {
       await new Promise((resolve, reject) => {
@@ -851,7 +880,7 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
 
         process.on('close', (code) => {
           if (code === 0) {
-            console.log(`✅ ${scriptType} script ${i + 1} completed successfully`);
+            log.success(`${scriptType} script ${i + 1} completed`);
             resolve(null);
           } else {
             reject(new Error(`${scriptType} script ${i + 1} exited with code ${code}`));
@@ -863,12 +892,13 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
         });
       });
     } catch (err) {
-      console.error(`❌ Error executing ${scriptType} script ${i + 1}:`, err instanceof Error ? err.message : 'Unknown error');
+      log.error(`Error executing ${scriptType} script ${i + 1}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       throw err;
     }
   }
 
-  console.log(`\n✅ All ${scriptType} scripts completed successfully`);
+  log.plain('');
+  log.success(`All ${scriptType} scripts completed`);
 }
 
 interface RunServicesOptions {
@@ -880,9 +910,10 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
   const hasHarborConfig = checkHasHarborConfig();
 
   if (!hasHarborConfig) {
-    console.log('❌ No harbor configuration found');
-    console.log('\nTo initialize a new Harbor project, please use:');
-    console.log('  harbor dock');
+    log.error('No harbor configuration found');
+    log.plain('');
+    log.info('To initialize a new Harbor project:');
+    log.cmd('harbor dock');
     process.exit(1);
   }
 
@@ -892,11 +923,11 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
     config = await readHarborConfig();
     const validationError = validateConfig(config);
     if (validationError) {
-      console.log(`❌ Invalid harbor.json configuration: ${validationError}`);
+      log.error(`Invalid harbor.json configuration: ${validationError}`);
       process.exit(1);
     }
   } catch (err) {
-    console.error('Error reading config:', err);
+    log.error(`Error reading config: ${err}`);
     process.exit(1);
   }
 
@@ -906,7 +937,7 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
   try {
     await execute(config.before || [], 'before');
   } catch {
-    console.error('❌ Before scripts failed, aborting launch');
+    log.error('Before scripts failed, aborting launch');
     process.exit(1);
   }
 
@@ -928,13 +959,13 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
 
   return new Promise((resolve) => {
     command.on('error', (err) => {
-      console.error(`Error running dev.sh: ${err}`);
+      log.error(`Error running dev.sh: ${err}`);
       process.exit(1);
     });
 
     command.on('close', async (code) => {
       if (code !== 0) {
-        console.error(`dev.sh exited with code ${code}`);
+        log.error(`dev.sh exited with code ${code}`);
         process.exit(1);
       }
 
@@ -944,7 +975,7 @@ async function runServices(options: RunServicesOptions = {}): Promise<void> {
         try {
           await execute(config.after || [], 'after');
         } catch {
-          console.error('❌ After scripts failed');
+          log.error('After scripts failed');
           process.exit(1);
         }
       }
