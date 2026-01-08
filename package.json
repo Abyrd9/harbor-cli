@@ -1,6 +1,6 @@
 {
   "name": "@abyrd9/harbor-cli",
-  "version": "2.3.0",
+  "version": "2.3.1",
   "description": "A CLI tool for orchestrating local development services in a tmux session. Perfect for microservices and polyglot projects with automatic service discovery and before/after script support.",
   "type": "module",
   "bin": {
