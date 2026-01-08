@@ -418,9 +418,10 @@ EXAMPLES:
     try {
       const config = await readHarborConfig();
       const sessionName = options.name || config.sessionName || 'harbor';
+      const socketName = `harbor-${sessionName}`;
       
       // Check if session exists
-      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+      const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
         stdio: 'pipe',
       });
       
@@ -437,13 +438,13 @@ EXAMPLES:
       });
       
       // Attach to the session
-      const attach = spawn('tmux', ['attach-session', '-t', sessionName], {
+      const attach = spawn('tmux', ['-L', socketName, 'attach-session', '-t', sessionName], {
         stdio: 'inherit',
       });
       
       attach.on('close', async (code) => {
         // Check if session was killed (vs just detached)
-        const checkAfter = spawn('tmux', ['has-session', '-t', sessionName], {
+        const checkAfter = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
           stdio: 'pipe',
         });
         
@@ -492,9 +493,10 @@ EXAMPLES:
     try {
       const config = await readHarborConfig();
       const sessionName = options.name || config.sessionName || 'harbor';
+      const socketName = `harbor-${sessionName}`;
       
       // Check if session exists
-      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+      const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
         stdio: 'pipe',
       });
       
@@ -510,7 +512,7 @@ EXAMPLES:
       }
       
       // Kill the session
-      const killSession = spawn('tmux', ['kill-session', '-t', sessionName], {
+      const killSession = spawn('tmux', ['-L', socketName, 'kill-session', '-t', sessionName], {
         stdio: 'inherit',
       });
       
@@ -566,9 +568,10 @@ EXAMPLES:
     try {
       const config = await readHarborConfig();
       const sessionName = options.name || config.sessionName || 'harbor';
+      const socketName = `harbor-${sessionName}`;
       
       // Check if session exists
-      const checkSession = spawn('tmux', ['has-session', '-t', sessionName], {
+      const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
         stdio: 'pipe',
       });
       
@@ -589,7 +592,7 @@ EXAMPLES:
       }
       
       // Get list of windows (services)
-      const listWindows = spawn('tmux', ['list-windows', '-t', sessionName, '-F', '#{window_index}|#{window_name}|#{pane_current_command}'], {
+      const listWindows = spawn('tmux', ['-L', socketName, 'list-windows', '-t', sessionName, '-F', '#{window_index}|#{window_name}|#{pane_current_command}'], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
       

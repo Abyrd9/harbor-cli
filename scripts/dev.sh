@@ -14,10 +14,15 @@ get_harbor_config() {
 # Get session name from env, config, or use default
 session_name="${HARBOR_SESSION_NAME:-$(get_harbor_config | jq -r '.sessionName // "harbor"')}"
 
+# Use a separate tmux socket for Harbor to avoid conflicts with existing tmux sessions
+# This prevents Harbor's global options from affecting other tmux sessions
+socket_name="harbor-${session_name}"
+tmux_cmd="tmux -L $socket_name"
+
 # Check if the session already exists and kill it
-if tmux has-session -t "$session_name" 2>/dev/null; then
+if $tmux_cmd has-session -t "$session_name" 2>/dev/null; then
     echo "Killing existing tmux session '$session_name'"
-    tmux kill-session -t "$session_name"
+    $tmux_cmd kill-session -t "$session_name"
 fi
 repo_root="$(pwd)"
 max_log_lines=1000
@@ -51,70 +56,70 @@ start_log_trim() {
 trap cleanup_logs EXIT
 
 # Start a new tmux session and rename the initial window
-tmux new-session -d -s "$session_name"
+$tmux_cmd new-session -d -s "$session_name"
 
 # Set tmux options
-tmux set-option -g prefix C-a
-tmux bind-key C-a send-prefix
-tmux set-option -g mouse on
-tmux set-option -g history-limit 50000
-tmux set-window-option -g mode-keys vi
+$tmux_cmd set-option -g prefix C-a
+$tmux_cmd bind-key C-a send-prefix
+$tmux_cmd set-option -g mouse on
+$tmux_cmd set-option -g history-limit 50000
+$tmux_cmd set-window-option -g mode-keys vi
 
 # Enable extended keys so modifier combinations (like Shift+Enter) pass through to applications
-tmux set-option -g extended-keys on
-tmux set-option -g xterm-keys on
+$tmux_cmd set-option -g extended-keys on
+$tmux_cmd set-option -g xterm-keys on
 
 # Add binding to kill session with Ctrl+q
-tmux bind-key -n C-q kill-session
+$tmux_cmd bind-key -n C-q kill-session
 
 # Add padding and styling to panes
-tmux set-option -g pane-border-style fg="#3f3f3f"
-tmux set-option -g pane-active-border-style fg="#6366f1"
-tmux set-option -g pane-border-status top
-tmux set-option -g pane-border-format ""
+$tmux_cmd set-option -g pane-border-style fg="#3f3f3f"
+$tmux_cmd set-option -g pane-active-border-style fg="#6366f1"
+$tmux_cmd set-option -g pane-border-status top
+$tmux_cmd set-option -g pane-border-format ""
 
 # Add padding inside panes
-tmux set-option -g status-left-length 100
-tmux set-option -g status-right-length 100
-tmux set-window-option -g window-style 'fg=colour247,bg=colour236'
-tmux set-window-option -g window-active-style 'fg=colour250,bg=black'
+$tmux_cmd set-option -g status-left-length 100
+$tmux_cmd set-option -g status-right-length 100
+$tmux_cmd set-window-option -g window-style 'fg=colour247,bg=colour236'
+$tmux_cmd set-window-option -g window-active-style 'fg=colour250,bg=black'
 
 # Set inner padding
-tmux set-option -g window-style "bg=#1c1917 fg=#a8a29e"
-tmux set-option -g window-active-style "bg=#1c1917 fg=#ffffff"
+$tmux_cmd set-option -g window-style "bg=#1c1917 fg=#a8a29e"
+$tmux_cmd set-option -g window-active-style "bg=#1c1917 fg=#ffffff"
 
 # Improve copy mode and mouse behavior
-tmux set-option -g set-clipboard external
-tmux bind-key -T copy-mode-vi v send-keys -X begin-selection
-tmux bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
-tmux bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
+$tmux_cmd set-option -g set-clipboard external
+$tmux_cmd bind-key -T copy-mode-vi v send-keys -X begin-selection
+$tmux_cmd bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+$tmux_cmd bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
 
 # Set easier window navigation shortcuts (Shift+Left/Right to switch windows)
-tmux bind-key -n S-Left select-window -t :-
-tmux bind-key -n S-Right select-window -t :+
+$tmux_cmd bind-key -n S-Left select-window -t :-
+$tmux_cmd bind-key -n S-Right select-window -t :+
 
 # Configure status bar
-tmux set-option -g status-position top
-tmux set-option -g status-style bg="#1c1917",fg="#a8a29e"
-tmux set-option -g status-left ""
-tmux set-option -g status-right "#[fg=#a8a29e]shift+←/→ switch · ctrl+q close · #[fg=white]%H:%M#[default]"
-tmux set-window-option -g window-status-current-format "\
+$tmux_cmd set-option -g status-position top
+$tmux_cmd set-option -g status-style bg="#1c1917",fg="#a8a29e"
+$tmux_cmd set-option -g status-left ""
+$tmux_cmd set-option -g status-right "#[fg=#a8a29e]shift+←/→ switch · ctrl+q close · #[fg=white]%H:%M#[default]"
+$tmux_cmd set-window-option -g window-status-current-format "\
 #[fg=#6366f1, bg=#1c1917] →\
 #[fg=#6366f1, bg=#1c1917, bold] #W\
 #[fg=#6366f1, bg=#1c1917]  "
-tmux set-window-option -g window-status-format "\
+$tmux_cmd set-window-option -g window-status-format "\
 #[fg=#a8a29e, bg=#1c1917]  \
 #[fg=#a8a29e, bg=#1c1917] #W \
 #[fg=#a8a29e, bg=#1c1917] "
 
 # Add padding below status bar
-tmux set-option -g status 2
-tmux set-option -Fg 'status-format[1]' '#{status-format[0]}'
-tmux set-option -g 'status-format[0]' ''
+$tmux_cmd set-option -g status 2
+$tmux_cmd set-option -Fg 'status-format[1]' '#{status-format[0]}'
+$tmux_cmd set-option -g 'status-format[0]' ''
 
 # Create a new window for the interactive shell
 echo "Creating window for interactive shell"
-tmux rename-window -t "$session_name":0 'Terminal'
+$tmux_cmd rename-window -t "$session_name":0 'Terminal'
 
 window_index=1  # Start from index 1
 
@@ -142,24 +147,24 @@ while read service; do
         log_file="$repo_root/.harbor/${session_name}-${name}.log"
         : > "$log_file"
         # Use pipe-pane to capture ALL terminal output (works with any program, no buffering issues)
-        tmux new-window -t "$session_name":$window_index -n "$name"
-        tmux pipe-pane -t "$session_name":$window_index "cat >> \"$log_file\""
-        tmux send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
+        $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
+        $tmux_cmd pipe-pane -t "$session_name":$window_index "cat >> \"$log_file\""
+        $tmux_cmd send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
         # Start background process to trim logs if they get too large
         start_log_trim "$log_file" "$effective_max_lines"
     else
-        tmux new-window -t "$session_name":$window_index -n "$name"
-        tmux send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
+        $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
+        $tmux_cmd send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
     fi
     
     ((window_index++))
 done < <(get_harbor_config | jq -c '.services[]')
 
 # Bind 'Home' key to switch to the terminal window
-tmux bind-key -n Home select-window -t :0
+$tmux_cmd bind-key -n Home select-window -t :0
 
 # Select the terminal window
-tmux select-window -t "$session_name":0
+$tmux_cmd select-window -t "$session_name":0
 
 # Attach to the tmux session (unless running in detached/headless mode)
 if [ "${HARBOR_DETACH:-0}" = "1" ]; then
@@ -179,5 +184,5 @@ if [ "${HARBOR_DETACH:-0}" = "1" ]; then
         echo ""
     fi
 else
-    tmux attach-session -t "$session_name"
+    $tmux_cmd attach-session -t "$session_name"
 fi
