@@ -98,11 +98,17 @@ $tmux_cmd bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-
 $tmux_cmd bind-key -n S-Left select-window -t :-
 $tmux_cmd bind-key -n S-Right select-window -t :+
 
+# Add Ctrl+t to create new terminal window (marked with + prefix)
+$tmux_cmd bind-key -n C-t new-window -n "+Terminal"
+
+# Add Ctrl+w to close current window ONLY if it's user-created (starts with +)
+$tmux_cmd bind-key -n C-w if-shell 'tmux display-message -p "#{window_name}" | grep -q "^+"' 'kill-window' 'display-message "Cannot close service windows (only +Terminal tabs)"'
+
 # Configure status bar
 $tmux_cmd set-option -g status-position top
 $tmux_cmd set-option -g status-style bg="#1c1917",fg="#a8a29e"
 $tmux_cmd set-option -g status-left ""
-$tmux_cmd set-option -g status-right "#[fg=#a8a29e]shift+←/→ switch · ctrl+q close · #[fg=white]%H:%M#[default]"
+$tmux_cmd set-option -g status-right "#[fg=#57534e]ctrl+t new · ctrl+w close · shift+←/→ switch · ctrl+q quit#[fg=#78716c] · %H:%M#[default]"
 $tmux_cmd set-window-option -g window-status-current-format "\
 #[fg=#6366f1, bg=#1c1917] →\
 #[fg=#6366f1, bg=#1c1917, bold] #W\
