@@ -12,6 +12,7 @@ A CLI tool for managing local development services with ease. Harbor helps you o
 - 🖥️ **Tmux Integration**: Professional terminal multiplexing for service management
 - 📝 **Service Logging**: Stream service output to log files for monitoring and debugging
 - 🏷️ **Custom Session Names**: Configure unique tmux session names
+- 🤖 **AI Agent Integration**: Inter-pane communication lets AI agents observe and interact with services
 
 ## Installation
 
@@ -158,9 +159,22 @@ Store configuration directly in your `package.json`:
 |---------|-------------|
 | `harbor dock` | Initialize Harbor config by auto-discovering services in your project |
 | `harbor moor` | Scan for and add new services to your existing Harbor configuration |
-| `harbor launch` | Start all services in a tmux session with pre-stage commands |
+| `harbor launch` | Start all services in a tmux session (`-d` for headless) |
+| `harbor anchor` | Attach to a running Harbor session |
+| `harbor scuttle` | Stop all services and kill the session |
+| `harbor bearings` | Show status of running services |
 | `harbor --help` | Show comprehensive help with feature descriptions |
 | `harbor --version` | Show version information |
+
+### Inter-Pane Communication
+
+| Command | Description |
+|---------|-------------|
+| `harbor hail <service> "<cmd>"` | Send keystrokes to another service pane |
+| `harbor survey <service>` | Capture output from a service pane |
+| `harbor parley <service> "<cmd>"` | Execute command and capture response |
+| `harbor whoami` | Show current pane identity and access |
+| `harbor context` | Output full session context for AI agents |
 
 ### Command Options
 
@@ -260,6 +274,88 @@ Enable logging to stream service output to files in `.harbor/`. This is particul
 - Stripped of ANSI escape codes for clean, readable output
 
 **Use case:** Point your AI assistant to the `.harbor/` folder so it can monitor service logs, spot errors, and understand runtime behavior while helping you develop.
+
+### Inter-Pane Communication for AI Agents
+
+Harbor enables AI agents running in one pane to observe and interact with other services. This is powerful for AI-assisted development workflows where an agent needs to monitor logs, send commands to REPLs, or coordinate between services.
+
+#### Configuration
+
+Add `canAccess` to specify which services a pane can communicate with:
+
+```json
+{
+  "services": [
+    {
+      "name": "repl",
+      "path": "./backend",
+      "command": "bin/mycli"
+    },
+    {
+      "name": "agent",
+      "path": ".",
+      "command": "opencode",
+      "canAccess": ["repl", "web"]
+    },
+    {
+      "name": "web",
+      "path": "./frontend",
+      "command": "npm run dev"
+    }
+  ]
+}
+```
+
+#### Commands
+
+**Survey** - Capture output from another pane:
+```bash
+harbor survey repl --lines 50
+```
+
+**Hail** - Send keystrokes to another pane (fire-and-forget):
+```bash
+harbor hail repl "user query --email test@example.com"
+```
+
+**Parley** - Execute command and capture response (uses markers for clean output):
+```bash
+harbor parley repl "users" --timeout 5000
+```
+
+**Whoami** - Check current pane identity and access:
+```bash
+harbor whoami
+```
+
+**Context** - Get full session documentation (markdown, great for AI context):
+```bash
+harbor context
+```
+
+#### Access Control
+
+- Services can only access panes listed in their `canAccess` array
+- Commands run from outside tmux (external terminal) bypass access control
+- Access is enforced based on the `HARBOR_SERVICE` environment variable
+
+#### Environment Variables
+
+Each pane automatically receives these environment variables:
+- `HARBOR_SESSION` - Session name
+- `HARBOR_SOCKET` - Tmux socket name
+- `HARBOR_SERVICE` - Current service name
+- `HARBOR_WINDOW` - Window number
+
+#### Use Case: AI Agent Integration
+
+Add to your agent's instructions:
+
+```markdown
+When starting, run `harbor whoami` to check your harbor context.
+Use `harbor survey <service>` to observe other panes.
+Use `harbor parley <service> "<cmd>"` to interact with REPLs/CLIs.
+```
 
 ### Before/After Scripts
 Run custom scripts before and after your services start:

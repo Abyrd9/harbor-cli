@@ -3,13 +3,17 @@
 import { Command } from '@commander-js/extra-typings';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, exec } from 'node:child_process';
 import { chmodSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
+import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import readline from 'node:readline';
 import pc from 'picocolors';
+
+const execAsync = promisify(exec);
 
 // Colored output helpers
 const log = {
@@ -202,6 +206,20 @@ type DevService = {
   command?: string;
   log?: boolean;
   maxLogLines?: number;
+  canAccess?: string[];
+}
+
+type SessionServiceInfo = {
+  window: number;
+  target: string;
+  canAccess?: string[];
+}
+
+type SessionInfo = {
+  session: string;
+  socket: string;
+  startedAt: string;
+  services: Record<string, SessionServiceInfo>;
 }
 
 type Script = {
@@ -217,6 +235,151 @@ type Config = {
 }
 
 type ConfigLocation = 'package.json' | 'harbor.json';
+
+// ─────────────────────────────────────────────────────────────
+// Inter-Pane Communication Functions
+// ─────────────────────────────────────────────────────────────
+
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+
+function getSessionInfo(): SessionInfo | null {
+  const sessionFile = path.join(process.cwd(), '.harbor', 'session.json');
+  if (!fs.existsSync(sessionFile)) return null;
+  try {
+    return JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
+  } catch {
+    return null;
+  }
+}
+
+function checkAccess(target: string): { allowed: boolean; error?: string } {
+  const session = getSessionInfo();
+  if (!session) {
+    return { allowed: false, error: 'No harbor session running. Run "harbor launch" first.' };
+  }
+
+  const targetService = session.services[target];
+  if (!targetService) {
+    const available = Object.keys(session.services).join(', ');
+    return { allowed: false, error: `Unknown service: ${target}. Available services: ${available}` };
+  }
+
+  // If called from outside a harbor pane (no HARBOR_SERVICE env), allow access
+  const callerService = process.env.HARBOR_SERVICE;
+  if (!callerService) {
+    return { allowed: true };
+  }
+
+  // If called from within a harbor pane, check canAccess
+  const callerInfo = session.services[callerService];
+  if (!callerInfo) {
+    return { allowed: true }; // Caller not in session, allow
+  }
+
+  const canAccess = callerInfo.canAccess || [];
+  if (!canAccess.includes(target)) {
+    return { 
+      allowed: false, 
+      error: `Service "${callerService}" does not have access to "${target}". Add "${target}" to canAccess in your harbor config.` 
+    };
+  }
+
+  return { allowed: true };
+}
+
+async function sendToPane(target: string, command: string): Promise<void> {
+  const session = getSessionInfo();
+  if (!session) throw new Error('No harbor session running');
+
+  const service = session.services[target];
+  if (!service) throw new Error(`Unknown service: ${target}`);
+
+  const tmuxCmd = `tmux -L ${session.socket}`;
+  const escaped = command.replace(/"/g, '\\"');
+
+  await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "${escaped}" Enter`);
+}
+
+async function capturePane(target: string, lines = 500): Promise<string> {
+  const session = getSessionInfo();
+  if (!session) throw new Error('No harbor session running');
+
+  const service = session.services[target];
+  if (!service) throw new Error(`Unknown service: ${target}`);
+
+  const tmuxCmd = `tmux -L ${session.socket}`;
+  const { stdout } = await execAsync(
+    `${tmuxCmd} capture-pane -t "${service.target}" -p -S -${lines}`
+  );
+
+  return stdout;
+}
+
+async function execInPane(
+  target: string,
+  command: string,
+  timeout = 3000
+): Promise<string> {
+  const session = getSessionInfo();
+  if (!session) throw new Error('No harbor session running');
+
+  const service = session.services[target];
+  if (!service) throw new Error(`Unknown service: ${target}`);
+
+  const tmuxCmd = `tmux -L ${session.socket}`;
+  const markerId = randomUUID().slice(0, 8);
+  const startMarker = `<<<HARBOR_START_${markerId}>>>`;
+  const endMarker = `<<<HARBOR_END_${markerId}>>>`;
+
+  // Send start marker
+  await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "echo '${startMarker}'" Enter`);
+  await sleep(100);
+
+  // Send command
+  const escaped = command.replace(/'/g, "'\\''");
+  await execAsync(`${tmuxCmd} send-keys -t "${service.target}" '${escaped}' Enter`);
+  await sleep(timeout);
+
+  // Send end marker
+  await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "echo '${endMarker}'" Enter`);
+  await sleep(200);
+
+  // Capture and extract
+  const { stdout } = await execAsync(
+    `${tmuxCmd} capture-pane -t "${service.target}" -p -S -500`
+  );
+
+  // Extract content between markers
+  const regex = new RegExp(`${escapeRegex(startMarker)}\\n([\\s\\S]*?)${escapeRegex(endMarker)}`);
+  const match = stdout.match(regex);
+
+  if (match) {
+    // Clean up the output
+    const rawOutput = match[1];
+    const lines = rawOutput.split('\n');
+    
+    // Filter out the echoed command and prompts
+    const cleanedLines = lines.filter(line => {
+      const trimmed = line.trim();
+      if (!trimmed) return false;
+      if (trimmed.includes(`echo '${startMarker}'`)) return false;
+      if (trimmed.includes(`echo '${endMarker}'`)) return false;
+      return true;
+    });
+
+    return cleanedLines.join('\n').trim() || '(no output)';
+  }
+
+  return stdout.trim() || '(no output)';
+}
+
+function escapeRegex(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ─────────────────────────────────────────────────────────────
+// Configuration Prompts
+// ─────────────────────────────────────────────────────────────
 
 function promptConfigLocation(): Promise<ConfigLocation> {
   const rl = readline.createInterface({
@@ -284,6 +447,15 @@ ${yellow('Commands:')}
   ${green('anchor')}     Attach to a running Harbor session
   ${green('scuttle')}    Stop all services
   ${green('bearings')}   Show status of running services
+
+${yellow('Inter-Pane Communication:')}
+  ${green('hail')}       Send a command to another service pane
+  ${green('survey')}     Capture output from a service pane
+  ${green('parley')}     Execute command and capture response
+
+${yellow('Agent Awareness:')}
+  ${green('whoami')}     Show current pane identity and access
+  ${green('context')}    Output full session context (markdown)
 
 ${yellow('Quick Start:')}
   ${dim('$')} harbor dock            ${dim('# Create config')}
@@ -508,6 +680,13 @@ program.command('scuttle')
         if (code === 0) {
           log.success(`Harbor session ${pc.cyan(sessionName)} stopped`);
           
+          // Clean up session.json
+          const sessionFile = path.join(process.cwd(), '.harbor', 'session.json');
+          if (fs.existsSync(sessionFile)) {
+            fs.unlinkSync(sessionFile);
+            log.dim('   Cleaned up session metadata');
+          }
+          
           // Execute after scripts when session is killed
           if (config.after && config.after.length > 0) {
             try {
@@ -621,6 +800,213 @@ program.command('bearings')
     }
   });
 
+// ─────────────────────────────────────────────────────────────
+// Inter-Pane Communication Commands
+// ─────────────────────────────────────────────────────────────
+
+program.command('hail')
+  .description('Send a command to another service pane')
+  .argument('<service>', 'Target service name')
+  .argument('<command>', 'Command to send')
+  .action(async (service, command) => {
+    try {
+      const access = checkAccess(service);
+      if (!access.allowed) {
+        log.error(access.error || 'Access denied');
+        process.exit(1);
+      }
+
+      await sendToPane(service, command);
+      log.success(`Hailed ${pc.cyan(service)}: ${pc.dim(command)}`);
+    } catch (err) {
+      log.error(err instanceof Error ? err.message : 'Failed to hail service');
+      process.exit(1);
+    }
+  });
+
+program.command('survey')
+  .description('Capture output from a service pane')
+  .argument('<service>', 'Target service name')
+  .option('-n, --lines <number>', 'Number of lines to capture', '500')
+  .action(async (service, options) => {
+    try {
+      const access = checkAccess(service);
+      if (!access.allowed) {
+        log.error(access.error || 'Access denied');
+        process.exit(1);
+      }
+
+      const output = await capturePane(service, parseInt(options.lines));
+      console.log(output);
+    } catch (err) {
+      log.error(err instanceof Error ? err.message : 'Failed to survey service');
+      process.exit(1);
+    }
+  });
+
+program.command('parley')
+  .description('Execute a command in a pane and capture the response')
+  .argument('<service>', 'Target service name')
+  .argument('<command>', 'Command to execute')
+  .option('-t, --timeout <ms>', 'Timeout in milliseconds', '3000')
+  .action(async (service, command, options) => {
+    try {
+      const access = checkAccess(service);
+      if (!access.allowed) {
+        log.error(access.error || 'Access denied');
+        process.exit(1);
+      }
+
+      const output = await execInPane(service, command, parseInt(options.timeout));
+      console.log(output);
+    } catch (err) {
+      log.error(err instanceof Error ? err.message : 'Failed to parley with service');
+      process.exit(1);
+    }
+  });
+
+program.command('whoami')
+  .description('Show current pane identity and session info')
+  .action(async () => {
+    const session = getSessionInfo();
+    const currentService = process.env.HARBOR_SERVICE;
+    
+    if (!session) {
+      log.warn('Not in a harbor session');
+      log.dim('   No .harbor/session.json found');
+      process.exit(0);
+    }
+
+    const currentServiceInfo = currentService ? session.services[currentService] : null;
+    const canAccessList = currentServiceInfo?.canAccess || [];
+    
+    log.header(`${pc.cyan('⚓')} Harbor Identity`);
+    log.plain('');
+    log.label('Session:', session.session);
+    log.label('Socket:', session.socket);
+    
+    if (currentService && currentServiceInfo) {
+      log.label('You are:', `${pc.green(currentService)} (window ${currentServiceInfo.window})`);
+      if (canAccessList.length > 0) {
+        log.label('Can access:', canAccessList.map(s => pc.cyan(s)).join(', '));
+      } else {
+        log.label('Can access:', pc.dim('(none configured)'));
+      }
+    } else {
+      log.label('You are:', pc.dim('external (not in a harbor pane)'));
+      log.label('Can access:', pc.green('all services'));
+    }
+    
+    log.plain('');
+    log.dim('   Run "harbor context" for full documentation');
+    log.dim('   Run "harbor bearings" to see all services');
+  });
+
+program.command('context')
+  .description('Output session context for AI agents (markdown format)')
+  .action(async () => {
+    const session = getSessionInfo();
+    const currentService = process.env.HARBOR_SERVICE;
+    
+    if (!session) {
+      console.log(`# Harbor Session
+
+No active harbor session found. Run \`harbor launch\` to start one.
+`);
+      process.exit(0);
+    }
+
+    const currentServiceInfo = currentService ? session.services[currentService] : null;
+    const canAccessList = currentServiceInfo?.canAccess || [];
+    
+    let output = `# Harbor Session Context
+
+You are running inside a **harbor** tmux session, which orchestrates multiple development services.
+
+## Current Session
+- **Session**: ${session.session}
+- **Socket**: ${session.socket}
+- **Started**: ${session.startedAt}
+`;
+
+    if (currentService) {
+      output += `- **Your Pane**: ${currentService} (window ${currentServiceInfo?.window})
+`;
+    }
+
+    output += `
+## Available Services
+| Service | Window | You Can Access |
+|---------|--------|----------------|
+`;
+
+    for (const [name, info] of Object.entries(session.services)) {
+      const isCurrent = name === currentService;
+      const hasAccess = !currentService || canAccessList.includes(name) || name === currentService;
+      const accessIcon = isCurrent ? '(you)' : hasAccess ? '✓' : '✗';
+      output += `| ${name} | ${info.window} | ${accessIcon} |\n`;
+    }
+
+    output += `
+## Inter-Pane Communication Commands
+
+You can interact with other service panes using these commands:
+
+### \`harbor hail <service> "<command>"\`
+Send keystrokes to another pane (fire-and-forget).
+\`\`\`bash
+harbor hail repl "echo hello"
+\`\`\`
+
+### \`harbor survey <service> [--lines N]\`
+Capture the current output/scrollback from another pane.
+\`\`\`bash
+harbor survey web --lines 50
+\`\`\`
+
+### \`harbor parley <service> "<command>" [--timeout ms]\`
+Execute a command in another pane and capture the response.
+Uses markers to delimit output. Good for REPLs and CLIs.
+\`\`\`bash
+harbor parley repl "users" --timeout 3000
+\`\`\`
+
+## Access Control
+`;
+
+    if (currentService) {
+      if (canAccessList.length > 0) {
+        output += `Your service (${currentService}) can access: **${canAccessList.join(', ')}**
+
+To access other services, add them to \`canAccess\` in harbor.json and restart the session.
+`;
+      } else {
+        output += `Your service (${currentService}) has no \`canAccess\` configured.
+
+Add services to \`canAccess\` in harbor.json to enable inter-pane communication:
+\`\`\`json
+{
+  "name": "${currentService}",
+  "canAccess": ["repl", "web"]
+}
+\`\`\`
+`;
+      }
+    } else {
+      output += `You are running from outside the harbor session, so you have access to all services.
+`;
+    }
+
+    output += `
+## Other Useful Commands
+- \`harbor bearings\` - Show session status and running services
+- \`harbor anchor\` - Attach to the tmux session interactively
+- \`harbor scuttle\` - Stop all services
+`;
+
+    console.log(output);
+  });
+
 program.parse();
 
 function fileExists(path: string) {
@@ -642,12 +1028,26 @@ export function validateConfig(config: Config): string | null {
     return 'Services must be an array';
   }
 
+  const serviceNames = new Set(config.services.map(s => s.name));
+
   for (const service of config.services) {
     if (!service.name) {
       return 'Service name is required';
     }
     if (!service.path) {
       return 'Service path is required';
+    }
+    
+    // Validate canAccess references
+    if (service.canAccess) {
+      for (const targetName of service.canAccess) {
+        if (!serviceNames.has(targetName)) {
+          return `Service "${service.name}" has canAccess reference to unknown service "${targetName}"`;
+        }
+        if (targetName === service.name) {
+          return `Service "${service.name}" cannot have canAccess reference to itself`;
+        }
+      }
     }
   }
 

@@ -38,6 +38,11 @@
                 "type": "integer",
                 "description": "Maximum number of lines to keep in the log file",
                 "minimum": 1
+              },
+              "canAccess": {
+                "type": "array",
+                "items": { "type": "string" },
+                "description": "Names of other services this pane can send commands to via hail/survey/parley"
               }
             },
             "additionalProperties": false

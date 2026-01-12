@@ -149,22 +149,74 @@ while read service; do
     echo "Path: $path"
     echo "Command: $command"
     
+    # Build the environment export command for inter-pane communication
+    env_export="export HARBOR_SESSION='$session_name' HARBOR_SOCKET='$socket_name' HARBOR_SERVICE='$name' HARBOR_WINDOW=$window_index"
+    
     if [ "$log" = "true" ]; then
         log_file="$repo_root/.harbor/${session_name}-${name}.log"
         : > "$log_file"
         # Use pipe-pane to capture ALL terminal output (works with any program, no buffering issues)
         $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
         $tmux_cmd pipe-pane -t "$session_name":$window_index "cat >> \"$log_file\""
-        $tmux_cmd send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
+        # Inject environment variables then run command
+        $tmux_cmd send-keys -t "$session_name":$window_index "$env_export && cd \"$path\" && $command" C-m
         # Start background process to trim logs if they get too large
         start_log_trim "$log_file" "$effective_max_lines"
     else
         $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
-        $tmux_cmd send-keys -t "$session_name":$window_index "cd \"$path\" && $command" C-m
+        # Inject environment variables then run command
+        $tmux_cmd send-keys -t "$session_name":$window_index "$env_export && cd \"$path\" && $command" C-m
     fi
     
     ((window_index++))
 done < <(get_harbor_config | jq -c '.services[]')
+
+# Generate session.json for inter-pane communication
+echo "Generating session metadata..."
+mkdir -p "$repo_root/.harbor"
+
+# Build the session JSON
+session_json=$(cat <<EOF
+{
+  "session": "$session_name",
+  "socket": "$socket_name",
+  "startedAt": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "services": {
+EOF
+)
+
+# Add each service to the JSON
+first_service=true
+svc_window_index=1
+while read service; do
+    name=$(echo $service | jq -r '.name')
+    can_access=$(echo $service | jq -c '.canAccess // []')
+    
+    if [ "$first_service" = true ]; then
+        first_service=false
+    else
+        session_json+=","
+    fi
+    
+    session_json+=$(cat <<EOF
+
+    "$name": {
+      "window": $svc_window_index,
+      "target": "$session_name:$svc_window_index",
+      "canAccess": $can_access
+    }
+EOF
+)
+    
+    ((svc_window_index++))
+done < <(get_harbor_config | jq -c '.services[]')
+
+session_json+="
+  }
+}"
+
+echo "$session_json" > "$repo_root/.harbor/session.json"
+echo "Session metadata written to .harbor/session.json"
 
 # Bind 'Home' key to switch to the terminal window
 $tmux_cmd bind-key -n Home select-window -t :0
