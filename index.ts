@@ -1394,20 +1394,6 @@ function ensureLogSetup(config: Config): void {
   if (!fs.existsSync(harborDir)) {
     fs.mkdirSync(harborDir, { recursive: true });
   }
-
-  const gitignorePath = path.join(process.cwd(), '.gitignore');
-  if (!fs.existsSync(gitignorePath)) {
-    return;
-  }
-
-  const gitignore = fs.readFileSync(gitignorePath, 'utf-8');
-  if (gitignore.includes('.harbor')) {
-    return;
-  }
-
-  const needsNewline = gitignore.length > 0 && !gitignore.endsWith('\n');
-  const entry = `${needsNewline ? '\n' : ''}.harbor/\n`;
-  fs.appendFileSync(gitignorePath, entry, 'utf-8');
 }
 
 // Get the package root directory

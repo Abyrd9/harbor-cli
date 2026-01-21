@@ -268,7 +268,7 @@ Enable logging to stream service output to files in `.harbor/`. This is particul
 - `maxLogLines`: Maximum lines to keep in log file (default: `1000`)
 
 **Log files are:**
-- Stored in `.harbor/` directory (automatically added to `.gitignore`)
+- Stored in `.harbor/` directory (add to `.gitignore` manually)
 - Named `{session}-{service}.log` (e.g., `local-dev-test-api.log`)
 - Automatically trimmed to prevent unbounded growth
 - Stripped of ANSI escape codes for clean, readable output
