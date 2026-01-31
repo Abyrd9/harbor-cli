@@ -341,3 +341,41 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 - 2.0.1
 - Updating release again
 
+
+## v2.4.2 - 2026-01-30
+
+- 2.4.2
+- chore: update tmux tab shortcuts
+- 2.4.1
+- chore: removing auto .gitignore add
+- 2.4.0
+- feat: add inter-pane communication (hail, survey, parley)
+- 2.3.4
+- feat(tmux): add keyboard shortcuts for managing terminal tabs
+- 2.3.3
+- style: add colorful output throughout the CLI
+- style: cleaner, colorful CLI help output
+- feat: block attach commands when already inside tmux session
+- fix: use separate tmux socket per Harbor session to prevent style conflicts
+- 2.3.2
+- Fixing bugs around after scripts running or not running when they should
+- 2.3.1
+- Adding name arg to other commands for those specific sessions
+- 2.3.0
+- Adding --name flag for custom session names not from the config
+- 2.2.0
+- Better help text for AI
+- Including headless mode and commands to attach to a headless mode
+- 2.1.1
+- Fixing bug with not passing keys into pane sessions
+- 2.1.0
+- Removing "Tab" capture
+- Fixing random code changes that show up on main terminal
+- Add custom tmux session names and comprehensive test suite
+- Updating some questions during setup, Also shift-arrow keys to navigate
+- Pushing up JSON schemas
+- 2.0.2
+- Fixing bugs around logs
+- 2.0.1
+- Updating release again
+
