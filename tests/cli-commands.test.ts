@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { spawn } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 
 const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
@@ -219,6 +220,22 @@ describe('Detach Mode Environment Variable', () => {
   });
 });
 
+describe('Tmux Shortcut Configuration', () => {
+  it('uses Ctrl+t/Ctrl+w bindings for user-created tabs', () => {
+    const devScriptPath = path.join(__dirname, '..', 'scripts', 'dev.sh');
+    const devScript = fs.readFileSync(devScriptPath, 'utf-8');
+
+    expect(devScript).toContain('bind-key -n C-t new-window -n "+Terminal"');
+    expect(devScript).toContain('bind-key -n C-w if-shell');
+    expect(devScript).toContain('ctrl+t new');
+    expect(devScript).toContain('ctrl+w close');
+    expect(devScript).not.toContain('bind-key -n C-T');
+    expect(devScript).not.toContain('bind-key -n C-W');
+    expect(devScript).not.toContain('ctrl+shift+t new');
+    expect(devScript).not.toContain('ctrl+shift+w close');
+  });
+});
+
 // Helper to run CLI with custom environment and timeout
 function runCLIWithEnv(
   args: string[], 
@@ -281,4 +298,3 @@ describe('Tmux Session Detection', () => {
     expect(stdout).not.toContain('Cannot launch in attached mode from inside a tmux session');
   });
 });
-
