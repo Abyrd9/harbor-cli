@@ -186,7 +186,8 @@ main() {
     log_step "Generating changelog from commits..."
     append_changelog_entry "$new_version" "$today" "$previous_tag"
 
-    git add package.json CHANGELOG.md dist bun.lock
+    git add package.json CHANGELOG.md bun.lock
+    git add -f dist
     git commit -m "$new_version"
     git tag "v${new_version}"
 

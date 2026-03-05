@@ -379,3 +379,7 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 - 2.0.1
 - Updating release again
 
+
+## 2.4.4 - 2026-03-05
+
+- fix: harden release script
