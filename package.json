@@ -18,8 +18,8 @@
     "prepare": "bun run build",
     "start": "bun dist/index.js",
     "harbor": "bun dist/index.js",
-    "test": "vitest",
-    "test:watch": "vitest --watch",
+    "test": "bun ./node_modules/vitest/vitest.mjs",
+    "test:watch": "bun ./node_modules/vitest/vitest.mjs --watch",
     "release": "bash release.sh"
   },
   "keywords": [
@@ -46,9 +46,9 @@
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@types/node": "^24.0.3",
-    "bun-types": "latest",
-    "typescript": "^5.8.3",
+    "@types/node": "^24.13.2",
+    "bun-types": "1.3.14",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.16"
   },
   "main": "index.js"

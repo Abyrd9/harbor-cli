@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 
 const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
+const describeIfTmuxWorks = canCreateTmuxSession() ? describe : describe.skip;
 
 // Helper to run CLI and capture output with timeout
 function runCLI(
@@ -40,6 +41,43 @@ function runCLI(
   });
 }
 
+function canCreateTmuxSession() {
+  const sessionName = `harbor-test-capability-${process.pid}-${Date.now()}`;
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-capability-'));
+
+  fs.writeFileSync(
+    path.join(tempDir, 'harbor.json'),
+    JSON.stringify({
+      sessionName,
+      services: [
+        {
+          name: 'test-service',
+          path: tempDir,
+          command: 'sleep 5',
+        },
+      ],
+    })
+  );
+
+  const launch = spawnSync('node', [CLI_PATH, 'launch', '-d'], {
+    cwd: tempDir,
+    encoding: 'utf-8',
+    stdio: 'pipe',
+    timeout: 3000,
+    env: { ...process.env, NO_COLOR: '1' },
+  });
+
+  const canLaunch =
+    launch.status === 0 &&
+    launch.stdout.includes('Harbor services started in detached mode') &&
+    tmuxSessionExists(sessionName);
+
+  killTmuxSession(sessionName);
+  fs.rmSync(tempDir, { recursive: true, force: true });
+
+  return canLaunch;
+}
+
 // Helper to get socket name for a session
 function getSocketName(sessionName: string): string {
   return `harbor-${sessionName}`;
@@ -60,7 +98,7 @@ function tmuxSessionExists(sessionName: string): boolean {
   return result.status === 0;
 }
 
-describe('After Scripts in Headless Mode', () => {
+describeIfTmuxWorks('After Scripts in Headless Mode', () => {
   let tempDir: string;
   const sessionName = 'harbor-test-after-scripts';
   const markerFile = 'after-script-ran.marker';

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -26,9 +26,13 @@ function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; code:
 
 describe('CLI Commands', () => {
   describe('harbor --help', () => {
+    let stdout = '';
+
+    beforeAll(async () => {
+      ({ stdout } = await runCLI(['--help']));
+    });
+
     it('should display all available commands', async () => {
-      const { stdout } = await runCLI(['--help']);
-      
       expect(stdout).toContain('dock');
       expect(stdout).toContain('moor');
       expect(stdout).toContain('launch');
@@ -38,12 +42,10 @@ describe('CLI Commands', () => {
     });
 
     it('should display version option', async () => {
-      const { stdout } = await runCLI(['--help']);
       expect(stdout).toContain('-V, --version');
     });
 
     it('should show quick start and commands', async () => {
-      const { stdout } = await runCLI(['--help']);
       expect(stdout).toContain('Quick Start');
       expect(stdout).toContain('Commands');
       expect(stdout).toContain('headless');
@@ -51,67 +53,80 @@ describe('CLI Commands', () => {
   });
 
   describe('harbor launch --help', () => {
+    let stdout = '';
+
+    beforeAll(async () => {
+      ({ stdout } = await runCLI(['launch', '--help']));
+    });
+
     it('should show --detach option', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('-d, --detach');
     });
 
     it('should show --headless option', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('--headless');
     });
 
     it('should describe headless as alias for detach', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('Alias for --detach');
     });
 
     it('should show --name option', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('--name <name>');
     });
 
     it('should describe --name option', async () => {
-      const { stdout } = await runCLI(['launch', '--help']);
       expect(stdout).toContain('Override tmux session name');
     });
   });
 
   describe('harbor anchor --help', () => {
+    let stdout = '';
+
+    beforeAll(async () => {
+      ({ stdout } = await runCLI(['anchor', '--help']));
+    });
+
     it('should describe anchoring to session', async () => {
-      const { stdout } = await runCLI(['anchor', '--help']);
       expect(stdout).toContain('Attach');
       expect(stdout).toContain('Harbor session');
     });
 
     it('should show --name option', async () => {
-      const { stdout } = await runCLI(['anchor', '--help']);
       expect(stdout).toContain('--name <name>');
     });
   });
 
   describe('harbor scuttle --help', () => {
+    let stdout = '';
+
+    beforeAll(async () => {
+      ({ stdout } = await runCLI(['scuttle', '--help']));
+    });
+
     it('should describe stopping services', async () => {
-      const { stdout } = await runCLI(['scuttle', '--help']);
       expect(stdout).toContain('Stop');
       expect(stdout).toContain('kill');
     });
 
     it('should show --name option', async () => {
-      const { stdout } = await runCLI(['scuttle', '--help']);
       expect(stdout).toContain('--name <name>');
     });
   });
 
   describe('harbor bearings --help', () => {
+    let stdout = '';
+
+    beforeAll(async () => {
+      ({ stdout } = await runCLI(['bearings', '--help']));
+    });
+
     it('should describe showing status', async () => {
-      const { stdout } = await runCLI(['bearings', '--help']);
       expect(stdout).toContain('status');
       expect(stdout).toContain('services');
     });
 
     it('should show --name option', async () => {
-      const { stdout } = await runCLI(['bearings', '--help']);
       expect(stdout).toContain('--name <name>');
     });
   });

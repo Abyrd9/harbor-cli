@@ -58,11 +58,17 @@ trap cleanup_logs EXIT
 # Start a new tmux session and rename the initial window
 $tmux_cmd new-session -d -s "$session_name"
 
+if ! $tmux_cmd has-session -t "$session_name" 2>/dev/null; then
+    echo "Failed to create tmux session '$session_name'. Check tmux socket permissions." >&2
+    exit 1
+fi
+
 # Set tmux options
 $tmux_cmd set-option -g prefix C-a
 $tmux_cmd bind-key C-a send-prefix
 $tmux_cmd set-option -g mouse on
 $tmux_cmd set-option -g history-limit 50000
+$tmux_cmd set-option -g remain-on-exit on
 $tmux_cmd set-window-option -g mode-keys vi
 
 # Enable extended keys so modifier combinations (like Shift+Enter) pass through to applications
