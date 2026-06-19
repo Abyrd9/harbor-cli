@@ -1274,7 +1274,8 @@ async function execute(scripts: Script[], scriptType: string): Promise<void> {
 
     try {
       await new Promise((resolve, reject) => {
-        const process = spawn('sh', ['-c', `cd "${script.path}" && ${script.command}`], {
+        const process = spawn('sh', ['-c', script.command], {
+          cwd: script.path,
           stdio: 'inherit',
         });
 

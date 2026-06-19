@@ -1100,7 +1100,8 @@ async function execute(scripts, scriptType) {
         log.dim(`   in ${script.path}`);
         try {
             await new Promise((resolve, reject) => {
-                const process = spawn('sh', ['-c', `cd "${script.path}" && ${script.command}`], {
+                const process = spawn('sh', ['-c', script.command], {
+                    cwd: script.path,
                     stdio: 'inherit',
                 });
                 process.on('close', (code) => {
