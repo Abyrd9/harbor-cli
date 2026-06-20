@@ -14,7 +14,7 @@
   ],
   "scripts": {
     "check": "bunx npm-check -u",
-    "build": "bunx tsc",
+    "build": "./node_modules/.bin/tsc",
     "prepare": "bun run build",
     "start": "bun dist/index.js",
     "harbor": "bun dist/index.js",
@@ -42,14 +42,15 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "@commander-js/extra-typings": "^14.0.0",
+    "@commander-js/extra-typings": "^15.0.0",
+    "commander": "^15.0.0",
     "picocolors": "^1.1.1"
   },
   "devDependencies": {
-    "@types/node": "^24.13.2",
-    "bun-types": "1.3.14",
-    "typescript": "^5.9.3",
-    "vitest": "^4.0.16"
+    "@types/node": "^26.0.0",
+    "bun-types": "^1.3.14",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.9"
   },
   "main": "index.js"
 }
