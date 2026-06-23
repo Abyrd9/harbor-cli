@@ -213,6 +213,9 @@ function checkAccess(target) {
     if (!callerInfo) {
         return { allowed: true }; // Caller not in session, allow
     }
+    if (target === callerService) {
+        return { allowed: true };
+    }
     const canAccess = callerInfo.canAccess || [];
     if (!canAccess.includes(target)) {
         return {

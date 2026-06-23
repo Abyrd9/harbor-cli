@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 
 const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
@@ -255,11 +256,13 @@ describe('Tmux Shortcut Configuration', () => {
 function runCLIWithEnv(
   args: string[], 
   env: Record<string, string>,
-  timeout = 10000
+  timeout = 10000,
+  cwd?: string
 ): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
     const proc = spawn('node', [CLI_PATH, ...args], {
       env: { ...process.env, NO_COLOR: '1', ...env },
+      cwd,
     });
     
     let stdout = '';
@@ -311,5 +314,43 @@ describe('Tmux Session Detection', () => {
     
     // Should NOT contain the tmux blocking message - headless mode is allowed inside tmux
     expect(stdout).not.toContain('Cannot launch in attached mode from inside a tmux session');
+  });
+});
+
+describe('Inter-Pane Access', () => {
+  it('should allow a service to survey its own pane without self-listing canAccess', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-self-access-'));
+    const harborDir = path.join(tempDir, '.harbor');
+
+    fs.mkdirSync(harborDir);
+    fs.writeFileSync(
+      path.join(harborDir, 'session.json'),
+      JSON.stringify({
+        session: 'harbor-missing-test',
+        socket: 'harbor-missing-socket',
+        startedAt: '2026-06-23T00:00:00Z',
+        services: {
+          'test-service': {
+            window: 1,
+            target: 'harbor-missing-test:1',
+            canAccess: [],
+          },
+        },
+      })
+    );
+
+    try {
+      const result = await runCLIWithEnv(
+        ['survey', 'test-service', '--lines', '20'],
+        { HARBOR_SERVICE: 'test-service' },
+        2000,
+        tempDir
+      );
+
+      expect(result.code).toBe(1);
+      expect(result.stdout).not.toContain('does not have access to "test-service"');
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
   });
 });
