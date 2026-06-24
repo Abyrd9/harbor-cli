@@ -295,6 +295,18 @@ async function execInPane(target, command, timeout = 3000) {
 function escapeRegex(str) {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
+function parseWholeNumberOption(value, optionName, minimum) {
+    const trimmed = value.trim();
+    const minimumLabel = minimum === 0 ? '0 or greater' : `${minimum} or greater`;
+    if (!/^\d+$/.test(trimmed)) {
+        throw new Error(`${optionName} must be a whole number ${minimumLabel}`);
+    }
+    const parsed = Number(trimmed);
+    if (!Number.isSafeInteger(parsed) || parsed < minimum) {
+        throw new Error(`${optionName} must be a whole number ${minimumLabel}`);
+    }
+    return parsed;
+}
 // ─────────────────────────────────────────────────────────────
 // Configuration Prompts
 // ─────────────────────────────────────────────────────────────
@@ -704,12 +716,13 @@ program.command('survey')
     .option('-n, --lines <number>', 'Number of lines to capture', '500')
     .action(async (service, options) => {
     try {
+        const lines = parseWholeNumberOption(options.lines, '--lines', 1);
         const access = checkAccess(service);
         if (!access.allowed) {
             log.error(access.error || 'Access denied');
             process.exit(1);
         }
-        const output = await capturePane(service, parseInt(options.lines));
+        const output = await capturePane(service, lines);
         console.log(output);
     }
     catch (err) {
@@ -724,12 +737,13 @@ program.command('parley')
     .option('-t, --timeout <ms>', 'Timeout in milliseconds', '3000')
     .action(async (service, command, options) => {
     try {
+        const timeout = parseWholeNumberOption(options.timeout, '--timeout', 0);
         const access = checkAccess(service);
         if (!access.allowed) {
             log.error(access.error || 'Access denied');
             process.exit(1);
         }
-        const output = await execInPane(service, command, parseInt(options.timeout));
+        const output = await execInPane(service, command, timeout);
         console.log(output);
     }
     catch (err) {

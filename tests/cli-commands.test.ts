@@ -353,4 +353,20 @@ describe('Inter-Pane Access', () => {
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  it('should reject a non-numeric survey line count before calling tmux', async () => {
+    const result = await runCLIWithEnv(['survey', 'test-service', '--lines', 'abc'], {}, 2000);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain('--lines must be a whole number 1 or greater');
+    expect(result.stdout).not.toContain('Unknown service');
+  });
+
+  it('should reject a negative parley timeout before calling tmux', async () => {
+    const result = await runCLIWithEnv(['parley', 'test-service', 'echo hello', '--timeout', '-1'], {}, 2000);
+
+    expect(result.code).toBe(1);
+    expect(result.stdout).toContain('--timeout must be a whole number 0 or greater');
+    expect(result.stdout).not.toContain('Unknown service');
+  });
 });
