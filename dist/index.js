@@ -28,7 +28,13 @@ const log = {
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const packageJson = JSON.parse(readFileSync(path.join(__dirname, '..', 'package.json'), 'utf-8'));
+const isDirectExecution = process.argv[1]
+    ? path.resolve(process.argv[1]) === __filename
+    : false;
+const packageJsonPath = fs.existsSync(path.join(__dirname, 'package.json'))
+    ? path.join(__dirname, 'package.json')
+    : path.join(__dirname, '..', 'package.json');
+const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 const requiredDependencies = [
     {
         name: 'tmux',
@@ -339,7 +345,7 @@ function promptConfigLocation() {
         ask();
     });
 }
-const possibleProjectFiles = [
+export const possibleProjectFiles = [
     'package.json', // Node.js projects
     'go.mod', // Go projects
     'Cargo.toml', // Rust projects
@@ -407,12 +413,12 @@ program
 program.helpInformation = () => '';
 program.on('--help', () => { });
 // If no command is provided, display custom help
-if (process.argv.length <= 2) {
+if (isDirectExecution && process.argv.length <= 2) {
     showCustomHelp();
     process.exit(0);
 }
 // Handle -h and --help for main command
-if (process.argv.includes('-h') || process.argv.includes('--help')) {
+if (isDirectExecution && (process.argv.includes('-h') || process.argv.includes('--help'))) {
     if (process.argv.length === 3) {
         showCustomHelp();
         process.exit(0);
@@ -880,7 +886,9 @@ Add services to \`canAccess\` in harbor.json to enable inter-pane communication:
 `;
     console.log(output);
 });
-program.parse();
+if (isDirectExecution) {
+    program.parse();
+}
 function fileExists(path) {
     return fs.existsSync(`${process.cwd()}/${path}`);
 }

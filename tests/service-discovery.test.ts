@@ -1,16 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-// Test that our project file detection list is comprehensive
-const possibleProjectFiles = [
-  'package.json',     // Node.js projects
-  'go.mod',           // Go projects
-  'Cargo.toml',       // Rust projects
-  'composer.json',    // PHP projects
-  'requirements.txt', // Python projects
-  'Gemfile',          // Ruby projects
-  'pom.xml',          // Java Maven projects
-  'build.gradle',     // Java Gradle projects
-];
+import { possibleProjectFiles } from '../index';
 
 describe('Service Discovery - Project Files List', () => {
   it('should contain expected project files', () => {

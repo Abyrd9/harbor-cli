@@ -50,7 +50,7 @@
     },
     "sessionName": {
       "type": "string",
-      "description": "Custom name for the tmux session (default: local-dev-test)",
+      "description": "Custom name for the tmux session (default: harbor)",
       "pattern": "^[a-zA-Z0-9_-]+$"
     },
     "before": {
@@ -94,4 +94,3 @@
   },
   "additionalProperties": false
 }
-

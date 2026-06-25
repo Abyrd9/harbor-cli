@@ -67,11 +67,6 @@ Create a dedicated configuration file:
     {
       "name": "database",
       "path": "./db",
-      "preStage": {
-        "command": "docker-compose up -d postgres",
-        "wait": 5,
-        "timeout": 60
-      },
       "command": "npm run dev",
       "log": true,
       "maxLogLines": 500
@@ -79,10 +74,6 @@ Create a dedicated configuration file:
     {
       "name": "api",
       "path": "./go-api",
-      "preStage": {
-        "command": "go mod download",
-        "wait": 2
-      },
       "command": "go run .",
       "log": true,
       "maxLogLines": 500
@@ -269,7 +260,7 @@ Enable logging to stream service output to files in `.harbor/`. This is particul
 
 **Log files are:**
 - Stored in `.harbor/` directory (add to `.gitignore` manually)
-- Named `{session}-{service}.log` (e.g., `local-dev-test-api.log`)
+- Named `{session}-{service}.log` (e.g., `harbor-api.log`)
 - Automatically trimmed to prevent unbounded growth
 - Stripped of ANSI escape codes for clean, readable output
 
