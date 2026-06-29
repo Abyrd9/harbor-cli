@@ -20,7 +20,7 @@ function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; code:
     proc.stderr.on('data', (data) => { stderr += data.toString(); });
     
     proc.on('close', (code) => {
-      resolve({ stdout, stderr, code: code || 0 });
+      resolve({ stdout, stderr, code: code ?? 0 });
     });
   });
 }
@@ -278,7 +278,7 @@ function runCLIWithEnv(
     
     proc.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr, code: code || 0 });
+      resolve({ stdout, stderr, code: code ?? 0 });
     });
   });
 }

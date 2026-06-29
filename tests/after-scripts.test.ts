@@ -36,7 +36,7 @@ function runCLI(
 
     proc.on('close', (code) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr, code: code || 0 });
+      resolve({ stdout, stderr, code: code ?? 0 });
     });
   });
 }

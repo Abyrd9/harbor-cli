@@ -549,7 +549,7 @@ program.command('anchor')
                     process.exit(1);
                 }
             }
-            process.exit(code || 0);
+            process.exit(code ?? 0);
         });
     }
     catch (err) {
@@ -605,7 +605,7 @@ program.command('scuttle')
             else {
                 log.error('Failed to stop Harbor session');
             }
-            process.exit(code || 0);
+            process.exit(code ?? 0);
         });
     }
     catch (err) {

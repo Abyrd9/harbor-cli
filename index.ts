@@ -668,7 +668,7 @@ program.command('anchor')
           }
         }
         
-        process.exit(code || 0);
+        process.exit(code ?? 0);
       });
     } catch (err) {
       log.error(err instanceof Error ? err.message : 'Unknown error');
@@ -729,7 +729,7 @@ program.command('scuttle')
         } else {
           log.error('Failed to stop Harbor session');
         }
-        process.exit(code || 0);
+        process.exit(code ?? 0);
       });
     } catch (err) {
       log.error(err instanceof Error ? err.message : 'Unknown error');
