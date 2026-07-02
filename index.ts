@@ -32,12 +32,11 @@ const log = {
 // Read version from package.json
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+const packageRoot = resolvePackageRoot(__dirname);
 const isDirectExecution = process.argv[1]
   ? path.resolve(process.argv[1]) === __filename
   : false;
-const packageJsonPath = fs.existsSync(path.join(__dirname, 'package.json'))
-  ? path.join(__dirname, 'package.json')
-  : path.join(__dirname, '..', 'package.json');
+const packageJsonPath = path.join(packageRoot, 'package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
 
 interface Dependency {
@@ -1433,9 +1432,7 @@ function ensureLogSetup(config: Config): void {
 
 // Get the package root directory
 function getPackageRoot(): string {
-  const __filename = fileURLToPath(import.meta.url);
-  const __dirname = path.dirname(__filename);
-  return path.join(__dirname, '..');
+  return packageRoot;
 }
 
 // Get the template scripts directory (where our source scripts live)
@@ -1489,4 +1486,10 @@ function checkHasHarborConfig(): boolean {
   } catch {
     return false;
   }
+}
+
+export function resolvePackageRoot(entryDir: string): string {
+  return fs.existsSync(path.join(entryDir, 'package.json'))
+    ? entryDir
+    : path.join(entryDir, '..');
 }

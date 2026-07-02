@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
 
-import { validateConfig } from '../index';
+import { resolvePackageRoot, validateConfig } from '../index';
 
 function validateRawConfig(config: unknown) {
   return validateConfig(config as Parameters<typeof validateConfig>[0]);
@@ -109,5 +110,15 @@ describe('Configuration Validation', () => {
       sessionName: 'my-project'
     };
     expect(validateConfig(config)).toBeNull();
+  });
+});
+
+describe('Package Root Resolution', () => {
+  it('keeps the repo root when running from source', () => {
+    expect(resolvePackageRoot(process.cwd())).toBe(process.cwd());
+  });
+
+  it('walks up from dist to the repo root', () => {
+    expect(resolvePackageRoot(path.join(process.cwd(), 'dist'))).toBe(process.cwd());
   });
 });
