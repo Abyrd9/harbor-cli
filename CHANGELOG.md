@@ -383,3 +383,19 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 ## 2.4.4 - 2026-03-05
 
 - fix: harden release script
+
+## 2.5.0 - 2026-07-14
+
+- Use npm authenticated session for releases
+- Restore failed release state
+- Harden Harbor session lifecycle
+- Refresh types and test deps
+- Fix Harbor package root resolution
+- Fix child process exit handling
+- Stabilize Vitest worker count
+- Refresh Harbor config contract tests
+- fix: validate inter-pane numeric flags
+- Fix harbor self-pane access
+- Update major dependencies
+- Fix after script cwd handling
+- Refresh deps and harden tmux tests
