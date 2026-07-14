@@ -79,6 +79,11 @@ describe('CLI Commands', () => {
     it('should describe --name option', async () => {
       expect(stdout).toContain('Override tmux session name');
     });
+
+    it('should show the explicit replacement option', async () => {
+      expect(stdout).toContain('--replace');
+      expect(stdout).toContain('Replace an existing Harbor session');
+    });
   });
 
   describe('harbor anchor --help', () => {

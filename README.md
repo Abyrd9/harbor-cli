@@ -150,7 +150,8 @@ Store configuration directly in your `package.json`:
 |---------|-------------|
 | `harbor dock` | Initialize Harbor config by auto-discovering services in your project |
 | `harbor moor` | Scan for and add new services to your existing Harbor configuration |
-| `harbor launch` | Start all services in a tmux session (`-d` for headless) |
+| `harbor launch` | Start all services, or leave the existing session running (`-d` for headless) |
+| `harbor launch --replace` | Explicitly replace an existing session (blocked from inside that session) |
 | `harbor anchor` | Attach to a running Harbor session |
 | `harbor scuttle` | Stop all services and kill the session |
 | `harbor bearings` | Show status of running services |
@@ -170,6 +171,8 @@ Store configuration directly in your `package.json`:
 ### Command Options
 
 - `-p, --path <path>`: Specify project root path (defaults to `./`)
+- `-d, --detach`: Launch services in the background
+- `--replace`: Replace an existing Harbor session instead of reusing it
 
 ## Supported Project Types
 
@@ -333,6 +336,7 @@ harbor context
 #### Environment Variables
 
 Each pane automatically receives these environment variables:
+- `HARBOR_ROOT` - Harbor project root containing `.harbor/session.json`
 - `HARBOR_SESSION` - Session name
 - `HARBOR_SOCKET` - Tmux socket name
 - `HARBOR_SERVICE` - Current service name

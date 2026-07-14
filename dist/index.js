@@ -2,16 +2,14 @@
 import { Command } from '@commander-js/extra-typings';
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn, exec } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { chmodSync } from 'node:fs';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
-import { randomUUID } from 'node:crypto';
 import os from 'node:os';
 import readline from 'node:readline';
 import pc from 'picocolors';
-const execAsync = promisify(exec);
+import { attachHarborSession, captureHarborPane, executeInHarborPane, getLiveHarborSession, harborSessionExists, isInsideHarborSession, killHarborSession, listHarborWindows, sendToHarborPane, } from './harbor-session.js';
 // Colored output helpers
 const log = {
     error: (msg) => console.log(`${pc.red('✗')} ${msg}`),
@@ -186,20 +184,8 @@ async function checkDependencies() {
 // ─────────────────────────────────────────────────────────────
 // Inter-Pane Communication Functions
 // ─────────────────────────────────────────────────────────────
-const sleep = (ms) => new Promise(r => setTimeout(r, ms));
-function getSessionInfo() {
-    const sessionFile = path.join(process.cwd(), '.harbor', 'session.json');
-    if (!fs.existsSync(sessionFile))
-        return null;
-    try {
-        return JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
-    }
-    catch {
-        return null;
-    }
-}
-function checkAccess(target) {
-    const session = getSessionInfo();
+async function checkAccess(target) {
+    const session = await getLiveHarborSession();
     if (!session) {
         return { allowed: false, error: 'No harbor session running. Run "harbor launch" first.' };
     }
@@ -229,76 +215,6 @@ function checkAccess(target) {
         };
     }
     return { allowed: true };
-}
-async function sendToPane(target, command) {
-    const session = getSessionInfo();
-    if (!session)
-        throw new Error('No harbor session running');
-    const service = session.services[target];
-    if (!service)
-        throw new Error(`Unknown service: ${target}`);
-    const tmuxCmd = `tmux -L ${session.socket}`;
-    const escaped = command.replace(/"/g, '\\"');
-    await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "${escaped}" Enter`);
-}
-async function capturePane(target, lines = 500) {
-    const session = getSessionInfo();
-    if (!session)
-        throw new Error('No harbor session running');
-    const service = session.services[target];
-    if (!service)
-        throw new Error(`Unknown service: ${target}`);
-    const tmuxCmd = `tmux -L ${session.socket}`;
-    const { stdout } = await execAsync(`${tmuxCmd} capture-pane -t "${service.target}" -p -S -${lines}`);
-    return stdout;
-}
-async function execInPane(target, command, timeout = 3000) {
-    const session = getSessionInfo();
-    if (!session)
-        throw new Error('No harbor session running');
-    const service = session.services[target];
-    if (!service)
-        throw new Error(`Unknown service: ${target}`);
-    const tmuxCmd = `tmux -L ${session.socket}`;
-    const markerId = randomUUID().slice(0, 8);
-    const startMarker = `<<<HARBOR_START_${markerId}>>>`;
-    const endMarker = `<<<HARBOR_END_${markerId}>>>`;
-    // Send start marker
-    await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "echo '${startMarker}'" Enter`);
-    await sleep(100);
-    // Send command
-    const escaped = command.replace(/'/g, "'\\''");
-    await execAsync(`${tmuxCmd} send-keys -t "${service.target}" '${escaped}' Enter`);
-    await sleep(timeout);
-    // Send end marker
-    await execAsync(`${tmuxCmd} send-keys -t "${service.target}" "echo '${endMarker}'" Enter`);
-    await sleep(200);
-    // Capture and extract
-    const { stdout } = await execAsync(`${tmuxCmd} capture-pane -t "${service.target}" -p -S -500`);
-    // Extract content between markers
-    const regex = new RegExp(`${escapeRegex(startMarker)}\\n([\\s\\S]*?)${escapeRegex(endMarker)}`);
-    const match = stdout.match(regex);
-    if (match) {
-        // Clean up the output
-        const rawOutput = match[1];
-        const lines = rawOutput.split('\n');
-        // Filter out the echoed command and prompts
-        const cleanedLines = lines.filter(line => {
-            const trimmed = line.trim();
-            if (!trimmed)
-                return false;
-            if (trimmed.includes(`echo '${startMarker}'`))
-                return false;
-            if (trimmed.includes(`echo '${endMarker}'`))
-                return false;
-            return true;
-        });
-        return cleanedLines.join('\n').trim() || '(no output)';
-    }
-    return stdout.trim() || '(no output)';
-}
-function escapeRegex(str) {
-    return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 function parseWholeNumberOption(value, optionName, minimum) {
     const trimmed = value.trim();
@@ -471,6 +387,7 @@ program.command('launch')
     .option('-d, --detach', 'Run in background (headless mode)')
     .option('--headless', 'Alias for --detach')
     .option('--name <name>', 'Override tmux session name')
+    .option('--replace', 'Replace an existing Harbor session')
     .action(async (options) => {
     try {
         const isDetached = options.detach || options.headless;
@@ -484,7 +401,7 @@ program.command('launch')
             process.exit(1);
         }
         await checkDependencies();
-        await runServices({ detach: isDetached, name: options.name });
+        await runServices({ detach: isDetached, name: options.name, replace: options.replace });
     }
     catch (err) {
         log.error(err instanceof Error ? err.message : 'Unknown error');
@@ -508,48 +425,18 @@ program.command('anchor')
         const config = await readHarborConfig();
         const sessionName = options.name || config.sessionName || 'harbor';
         const socketName = `harbor-${sessionName}`;
-        // Check if session exists
-        const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
-            stdio: 'pipe',
-        });
-        await new Promise((resolve) => {
-            checkSession.on('close', (code) => {
-                if (code !== 0) {
-                    log.error(`No running Harbor session found ${pc.dim(`(looking for: ${sessionName})`)}`);
-                    log.plain('');
-                    log.info('To start services:');
-                    log.cmd('harbor launch');
-                    process.exit(1);
-                }
-                resolve();
-            });
-        });
-        // Attach to the session
-        const attach = spawn('tmux', ['-L', socketName, 'attach-session', '-t', sessionName], {
-            stdio: 'inherit',
-        });
-        attach.on('close', async (code) => {
-            // Check if session was killed (vs just detached)
-            const checkAfter = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
-                stdio: 'pipe',
-            });
-            const sessionStillExists = await new Promise((resolve) => {
-                checkAfter.on('close', (checkCode) => {
-                    resolve(checkCode === 0);
-                });
-            });
-            // If session no longer exists, it was killed - run after scripts
-            if (!sessionStillExists && config.after && config.after.length > 0) {
-                try {
-                    await execute(config.after, 'after');
-                }
-                catch {
-                    log.error('After scripts failed');
-                    process.exit(1);
-                }
-            }
-            process.exit(code ?? 0);
-        });
+        if (!await harborSessionExists(sessionName, socketName)) {
+            log.error(`No running Harbor session found ${pc.dim(`(looking for: ${sessionName})`)}`);
+            log.plain('');
+            log.info('To start services:');
+            log.cmd('harbor launch');
+            process.exit(1);
+        }
+        const code = await attachHarborSession(sessionName, socketName);
+        if (!await harborSessionExists(sessionName, socketName) && config.after?.length) {
+            await execute(config.after, 'after');
+        }
+        process.exit(code);
     }
     catch (err) {
         log.error(err instanceof Error ? err.message : 'Unknown error');
@@ -564,48 +451,18 @@ program.command('scuttle')
         const config = await readHarborConfig();
         const sessionName = options.name || config.sessionName || 'harbor';
         const socketName = `harbor-${sessionName}`;
-        // Check if session exists
-        const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
-            stdio: 'pipe',
-        });
-        const sessionExists = await new Promise((resolve) => {
-            checkSession.on('close', (code) => {
-                resolve(code === 0);
-            });
-        });
-        if (!sessionExists) {
+        if (!await harborSessionExists(sessionName, socketName)) {
             log.info(`No running Harbor session found ${pc.dim(`(looking for: ${sessionName})`)}`);
             process.exit(0);
         }
-        // Kill the session
-        const killSession = spawn('tmux', ['-L', socketName, 'kill-session', '-t', sessionName], {
-            stdio: 'inherit',
-        });
-        killSession.on('close', async (code) => {
-            if (code === 0) {
-                log.success(`Harbor session ${pc.cyan(sessionName)} stopped`);
-                // Clean up session.json
-                const sessionFile = path.join(process.cwd(), '.harbor', 'session.json');
-                if (fs.existsSync(sessionFile)) {
-                    fs.unlinkSync(sessionFile);
-                    log.dim('   Cleaned up session metadata');
-                }
-                // Execute after scripts when session is killed
-                if (config.after && config.after.length > 0) {
-                    try {
-                        await execute(config.after, 'after');
-                    }
-                    catch {
-                        log.error('After scripts failed');
-                        process.exit(1);
-                    }
-                }
-            }
-            else {
-                log.error('Failed to stop Harbor session');
-            }
-            process.exit(code ?? 0);
-        });
+        await killHarborSession(sessionName, socketName);
+        log.success(`Harbor session ${pc.cyan(sessionName)} stopped`);
+        const sessionFile = path.join(process.cwd(), '.harbor', 'session.json');
+        if (fs.existsSync(sessionFile)) {
+            fs.unlinkSync(sessionFile);
+            log.dim('   Cleaned up session metadata');
+        }
+        await execute(config.after || [], 'after');
     }
     catch (err) {
         log.error(err instanceof Error ? err.message : 'Unknown error');
@@ -620,16 +477,7 @@ program.command('bearings')
         const config = await readHarborConfig();
         const sessionName = options.name || config.sessionName || 'harbor';
         const socketName = `harbor-${sessionName}`;
-        // Check if session exists
-        const checkSession = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
-            stdio: 'pipe',
-        });
-        const sessionExists = await new Promise((resolve) => {
-            checkSession.on('close', (code) => {
-                resolve(code === 0);
-            });
-        });
-        if (!sessionExists) {
+        if (!await harborSessionExists(sessionName, socketName)) {
             log.header(`${pc.cyan('⚓')} Harbor Status`);
             log.plain('');
             log.label('Session:', sessionName);
@@ -641,18 +489,7 @@ program.command('bearings')
             log.plain('');
             process.exit(0);
         }
-        // Get list of windows (services)
-        const listWindows = spawn('tmux', ['-L', socketName, 'list-windows', '-t', sessionName, '-F', '#{window_index}|#{window_name}|#{pane_current_command}'], {
-            stdio: ['pipe', 'pipe', 'pipe'],
-        });
-        let windowOutput = '';
-        listWindows.stdout.on('data', (data) => {
-            windowOutput += data.toString();
-        });
-        await new Promise((resolve) => {
-            listWindows.on('close', () => resolve());
-        });
-        const windows = windowOutput.trim().split('\n').filter(Boolean);
+        const windows = await listHarborWindows(sessionName, socketName);
         log.header(`${pc.cyan('⚓')} Harbor Status`);
         log.plain('');
         log.label('Session:', sessionName);
@@ -660,8 +497,7 @@ program.command('bearings')
         log.label('Windows:', String(windows.length));
         log.plain('');
         log.plain(`   ${pc.dim('Services:')}`);
-        for (const window of windows) {
-            const [index, name] = window.split('|');
+        for (const { index, name } of windows) {
             const logFile = `.harbor/${sessionName}-${name}.log`;
             const hasLog = fs.existsSync(path.join(process.cwd(), logFile));
             const logIndicator = hasLog ? pc.dim(' 📄') : '';
@@ -702,12 +538,12 @@ program.command('hail')
     .argument('<command>', 'Command to send')
     .action(async (service, command) => {
     try {
-        const access = checkAccess(service);
+        const access = await checkAccess(service);
         if (!access.allowed) {
             log.error(access.error || 'Access denied');
             process.exit(1);
         }
-        await sendToPane(service, command);
+        await sendToHarborPane(service, command);
         log.success(`Hailed ${pc.cyan(service)}: ${pc.dim(command)}`);
     }
     catch (err) {
@@ -722,12 +558,12 @@ program.command('survey')
     .action(async (service, options) => {
     try {
         const lines = parseWholeNumberOption(options.lines, '--lines', 1);
-        const access = checkAccess(service);
+        const access = await checkAccess(service);
         if (!access.allowed) {
             log.error(access.error || 'Access denied');
             process.exit(1);
         }
-        const output = await capturePane(service, lines);
+        const output = await captureHarborPane(service, lines);
         console.log(output);
     }
     catch (err) {
@@ -743,12 +579,12 @@ program.command('parley')
     .action(async (service, command, options) => {
     try {
         const timeout = parseWholeNumberOption(options.timeout, '--timeout', 0);
-        const access = checkAccess(service);
+        const access = await checkAccess(service);
         if (!access.allowed) {
             log.error(access.error || 'Access denied');
             process.exit(1);
         }
-        const output = await execInPane(service, command, timeout);
+        const output = await executeInHarborPane(service, command, timeout);
         console.log(output);
     }
     catch (err) {
@@ -759,7 +595,7 @@ program.command('parley')
 program.command('whoami')
     .description('Show current pane identity and session info')
     .action(async () => {
-    const session = getSessionInfo();
+    const session = await getLiveHarborSession();
     const currentService = process.env.HARBOR_SERVICE;
     if (!session) {
         log.warn('Not in a harbor session');
@@ -792,7 +628,7 @@ program.command('whoami')
 program.command('context')
     .description('Output session context for AI agents (markdown format)')
     .action(async () => {
-    const session = getSessionInfo();
+    const session = await getLiveHarborSession();
     const currentService = process.env.HARBOR_SERVICE;
     if (!session) {
         console.log(`# Harbor Session
@@ -1173,6 +1009,19 @@ async function runServices(options = {}) {
         log.error(`Error reading config: ${err}`);
         process.exit(1);
     }
+    const sessionName = options.name || config.sessionName || 'harbor';
+    const socketName = `harbor-${sessionName}`;
+    const sessionExists = await harborSessionExists(sessionName, socketName);
+    if (sessionExists && !options.replace) {
+        log.info(`Harbor session ${pc.cyan(sessionName)} is already running`);
+        return;
+    }
+    if (sessionExists &&
+        options.replace &&
+        isInsideHarborSession(sessionName, socketName)) {
+        log.error('Cannot replace the Harbor session this process is running inside');
+        process.exit(1);
+    }
     ensureLogSetup(config);
     // Execute before scripts
     try {
@@ -1190,6 +1039,7 @@ async function runServices(options = {}) {
         ...process.env,
         HARBOR_DETACH: options.detach ? '1' : '0',
         HARBOR_SESSION_NAME: options.name || '',
+        HARBOR_REPLACE: options.replace ? '1' : '0',
     };
     const command = spawn('bash', [scriptPath], {
         stdio: 'inherit', // This will pipe stdin/stdout/stderr to the parent process

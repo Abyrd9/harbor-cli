@@ -78,6 +78,8 @@ This file captures the conventions that autonomous agents should follow while wo
 
 ## Session & Logs
 - `.harbor/` houses `session.json` plus `{session}-{service}.log`; keep it in `.gitignore` and never commit its contents.
+- Service panes receive `HARBOR_ROOT`, which lets Harbor resolve live session metadata outside the project root.
+- `harbor launch` preserves an existing session; use `--replace` only from outside the session when replacement is intentional.
 - Logs are automatically trimmed (default 1000 lines) and stripped of ANSI codes to prevent runaway files.
 - Reference `.harbor/` log paths in documentation when you want reviewers or agents to follow runtime output.
 - When sharing captured service output, include the `session` name and timestamp so readers can correlate entries.

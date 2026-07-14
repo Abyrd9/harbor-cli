@@ -19,9 +19,13 @@ session_name="${HARBOR_SESSION_NAME:-$(get_harbor_config | jq -r '.sessionName /
 socket_name="harbor-${session_name}"
 tmux_cmd="tmux -L $socket_name"
 
-# Check if the session already exists and kill it
+# Replacing a running session must be explicitly requested by the CLI.
 if $tmux_cmd has-session -t "$session_name" 2>/dev/null; then
-    echo "Killing existing tmux session '$session_name'"
+    if [ "${HARBOR_REPLACE:-0}" != "1" ]; then
+        echo "Harbor session '$session_name' is already running" >&2
+        exit 1
+    fi
+    echo "Replacing existing tmux session '$session_name'"
     $tmux_cmd kill-session -t "$session_name"
 fi
 repo_root="$(pwd)"
@@ -156,7 +160,7 @@ while read service; do
     echo "Command: $command"
     
     # Build the environment export command for inter-pane communication
-    env_export="export HARBOR_SESSION='$session_name' HARBOR_SOCKET='$socket_name' HARBOR_SERVICE='$name' HARBOR_WINDOW=$window_index"
+    env_export="export HARBOR_ROOT='$repo_root' HARBOR_SESSION='$session_name' HARBOR_SOCKET='$socket_name' HARBOR_SERVICE='$name' HARBOR_WINDOW=$window_index"
     
     if [ "$log" = "true" ]; then
         log_file="$repo_root/.harbor/${session_name}-${name}.log"
