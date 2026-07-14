@@ -8,6 +8,12 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m'
 
+release_head=''
+release_tag=''
+release_started=false
+release_published=false
+release_tag_created=false
+
 log_step() {
     echo -e "${GREEN}$1${NC}"
 }
@@ -24,6 +30,29 @@ abort() {
     log_error "$1"
     exit 1
 }
+
+restore_failed_release() {
+    local exit_code=$?
+    trap - EXIT
+
+    if [ "$exit_code" -ne 0 ] \
+        && [ "$release_started" = true ] \
+        && [ "$release_published" = false ]; then
+        if [ "$release_tag_created" = true ]; then
+            git tag -d "$release_tag" >/dev/null 2>&1 || true
+        fi
+
+        if git reset --hard "$release_head" >/dev/null; then
+            log_warn "Restored pre-release state after failed publication."
+        else
+            log_error "Automatic cleanup failed. Reset to ${release_head} before retrying."
+        fi
+    fi
+
+    exit "$exit_code"
+}
+
+trap restore_failed_release EXIT
 
 load_env() {
     if [ -f .env ]; then
@@ -174,6 +203,10 @@ main() {
     ensure_remote_is_up_to_date
     ensure_version_is_unpublished "$package_name" "$new_version"
 
+    release_head=$(git rev-parse HEAD)
+    release_tag="v${new_version}"
+    release_started=true
+
     log_step "Building project..."
     bun run build
 
@@ -189,15 +222,24 @@ main() {
     git add package.json CHANGELOG.md bun.lock
     git add -f dist
     git commit -m "$new_version"
-    git tag "v${new_version}"
+    git tag "$release_tag"
+    release_tag_created=true
 
     log_step "Publishing to npm..."
-    npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"
+    if ! npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"; then
+        if npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
+            log_warn "npm returned an error, but ${new_version} is published. Continuing."
+        else
+            abort "Publishing failed. Release changes will be reverted."
+        fi
+    fi
+    release_published=true
 
     log_step "Pushing changes to repository..."
     git push origin main
     git push origin "v${new_version}"
 
+    release_started=false
     log_step "Release ${new_version} complete!"
 }
 
