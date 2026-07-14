@@ -22,6 +22,7 @@ describe('Release script', () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-release-'));
     const remoteDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-release-remote-'));
     const binDir = path.join(tempDir, 'bin');
+    const npmLogPath = path.join(remoteDir, 'npm.log');
     tempDirs.push(tempDir, remoteDir);
 
     fs.mkdirSync(binDir);
@@ -40,7 +41,10 @@ describe('Release script', () => {
     fs.writeFileSync(path.join(tempDir, 'dist', 'index.js'), 'console.log("test");\n');
     fs.writeFileSync(
       path.join(binDir, 'npm'),
-      '#!/bin/bash\n[ "$1" = "view" ] && exit 1\n[ "$1" = "publish" ] && exit 42\nexit 1\n'
+      '#!/bin/bash\nprintf "%s\\n" "$*" >> "$NPM_LOG"\n' +
+        '[ "$1" = "whoami" ] && echo "abyrd" && exit 0\n' +
+        '[ "$1" = "view" ] && exit 1\n' +
+        '[ "$1" = "publish" ] && exit 42\nexit 1\n'
     );
     fs.chmodSync(path.join(binDir, 'npm'), 0o755);
 
@@ -57,7 +61,12 @@ describe('Release script', () => {
     const result = spawnSync('bash', ['release.sh'], {
       cwd: tempDir,
       encoding: 'utf8',
-      env: { ...process.env, NPM_TOKEN: 'invalid', PATH: `${binDir}:${process.env.PATH}` },
+      env: {
+        ...process.env,
+        NPM_LOG: npmLogPath,
+        NPM_TOKEN: 'invalid',
+        PATH: `${binDir}:${process.env.PATH}`,
+      },
       input: '1\n',
       timeout: 30000,
     });
@@ -72,5 +81,9 @@ describe('Release script', () => {
     expect(packageJson.version).toBe('1.0.0');
     expect(fs.readFileSync(path.join(tempDir, 'CHANGELOG.md'), 'utf8')).toBe('# Changelog\n');
     expect(runGit(tempDir, ['status', '--porcelain'])).toBe('');
+    const npmLog = fs.readFileSync(npmLogPath, 'utf8');
+    expect(npmLog).toContain('whoami');
+    expect(npmLog).toContain('publish --access public');
+    expect(npmLog).not.toContain('_authToken');
   });
 });

@@ -54,15 +54,6 @@ restore_failed_release() {
 
 trap restore_failed_release EXIT
 
-load_env() {
-    if [ -f .env ]; then
-        set -a
-        # shellcheck disable=SC1091
-        source .env
-        set +a
-    fi
-}
-
 ensure_clean_worktree() {
     if [ -n "$(git status --porcelain)" ]; then
         abort "Working tree is not clean. Commit or stash changes before releasing."
@@ -78,9 +69,9 @@ ensure_main_branch() {
     fi
 }
 
-ensure_npm_token() {
-    if [ -z "${NPM_TOKEN:-}" ]; then
-        abort "NPM_TOKEN environment variable is not set. Add it to .env or export it before releasing."
+ensure_npm_auth() {
+    if ! npm whoami >/dev/null 2>&1; then
+        abort "npm is not authenticated. Run 'npm login' before releasing."
     fi
 }
 
@@ -191,8 +182,7 @@ main() {
     local previous_tag
     local today
 
-    load_env
-    ensure_npm_token
+    ensure_npm_auth
     ensure_main_branch
     ensure_clean_worktree
 
@@ -226,7 +216,7 @@ main() {
     release_tag_created=true
 
     log_step "Publishing to npm..."
-    if ! npm publish --access public --//registry.npmjs.org/:_authToken="$NPM_TOKEN"; then
+    if ! npm publish --access public; then
         if npm view "${package_name}@${new_version}" version >/dev/null 2>&1; then
             log_warn "npm returned an error, but ${new_version} is published. Continuing."
         else
