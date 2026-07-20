@@ -403,3 +403,8 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 ## 2.5.1 - 2026-07-19
 
 - Harden Harbor config and tmux handling
+
+## 2.5.2 - 2026-07-20
+
+- Fix global Harbor entrypoint
+- Harden config validation
