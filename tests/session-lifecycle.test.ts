@@ -80,6 +80,23 @@ afterEach(() => {
 });
 
 describe('Session lifecycle', () => {
+  it('launches an idle service pane when its command is empty', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-idle-service-'));
+    tempDirs.push(tempDir);
+    const tmux = createFakeTmux(tempDir);
+    fs.writeFileSync(
+      path.join(tempDir, 'harbor.json'),
+      JSON.stringify({
+        services: [{ name: 'worker', path: tempDir, command: '' }],
+      })
+    );
+
+    const result = await runCLI(['launch', '-d'], { cwd: tempDir, env: tmux.env });
+
+    expect(result.code, result.stderr || result.stdout).toBe(0);
+    expect(fs.readFileSync(tmux.logPath, 'utf-8')).toContain('&& : C-m');
+  });
+
   it('keeps an existing session running when launch is called again', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-idempotent-launch-'));
     const sessionName = `harbor-idempotent-${process.pid}-${Date.now()}`;

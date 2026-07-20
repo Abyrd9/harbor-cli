@@ -11,7 +11,7 @@ export function validateConfig(config) {
             return 'Service name is required';
         if (!service.path)
             return 'Service path is required';
-        if (!service.command)
+        if (typeof service.command !== 'string')
             return 'Service command is required';
         if (service.canAccess !== undefined && !Array.isArray(service.canAccess)) {
             return `Service "${service.name}" canAccess must be an array`;

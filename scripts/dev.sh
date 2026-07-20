@@ -149,6 +149,7 @@ while IFS= read -r service; do
     name=$(jq -r '.name' <<< "$service")
     path=$(jq -r '.path' <<< "$service")
     command=$(jq -r '.command' <<< "$service")
+    command=${command:-:}
     log=$(jq -r '.log // false' <<< "$service")
     service_max_lines=$(jq -r '.maxLogLines // empty' <<< "$service")
 
