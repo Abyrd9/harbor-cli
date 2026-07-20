@@ -26,13 +26,23 @@ export interface Config {
 export function validateConfig(config: Config): string | null {
   if (!Array.isArray(config.services)) return 'Services must be an array';
 
-  const serviceNames = new Set(config.services.map((service) => service.name));
+  const serviceNames = new Set<string>();
 
-  for (const service of config.services) {
+  for (let i = 0; i < config.services.length; i++) {
+    const service = config.services[i] as Partial<DevService> | null;
+
+    if (!service || typeof service !== 'object') return `Service ${i} must be an object`;
     if (!service.name) return 'Service name is required';
     if (!service.path) return 'Service path is required';
     if (!service.command) return 'Service command is required';
+    if (service.canAccess !== undefined && !Array.isArray(service.canAccess)) {
+      return `Service "${service.name}" canAccess must be an array`;
+    }
 
+    serviceNames.add(service.name);
+  }
+
+  for (const service of config.services) {
     if (service.canAccess) {
       for (const targetName of service.canAccess) {
         if (!serviceNames.has(targetName)) {
@@ -49,7 +59,8 @@ export function validateConfig(config: Config): string | null {
 
   if (config.before) {
     for (let i = 0; i < config.before.length; i++) {
-      const script = config.before[i];
+      const script = config.before[i] as Partial<Script> | null;
+      if (!script || typeof script !== 'object') return `Before script ${i} must be an object`;
       if (!script.path) return `Before script ${i} must have a path`;
       if (!script.command) return `Before script ${i} must have a command`;
     }
@@ -59,7 +70,8 @@ export function validateConfig(config: Config): string | null {
 
   if (config.after) {
     for (let i = 0; i < config.after.length; i++) {
-      const script = config.after[i];
+      const script = config.after[i] as Partial<Script> | null;
+      if (!script || typeof script !== 'object') return `After script ${i} must be an object`;
       if (!script.path) return `After script ${i} must have a path`;
       if (!script.command) return `After script ${i} must have a command`;
     }

@@ -45,6 +45,13 @@ describe('Configuration Validation', () => {
     expect(validateRawConfig(config)).toContain('command is required');
   });
 
+  it('should reject non-object service entries', () => {
+    const config = {
+      services: [null]
+    };
+    expect(validateRawConfig(config)).toContain('Service 0 must be an object');
+  });
+
   it('should validate canAccess references to sibling services', () => {
     const config = {
       services: [
@@ -76,6 +83,20 @@ describe('Configuration Validation', () => {
       ]
     };
     expect(validateRawConfig(config)).toContain('unknown service');
+  });
+
+  it('should reject non-array canAccess values', () => {
+    const config = {
+      services: [
+        {
+          name: 'api',
+          path: './test',
+          command: 'bun run dev',
+          canAccess: 'web'
+        }
+      ]
+    };
+    expect(validateRawConfig(config)).toContain('canAccess must be an array');
   });
 
   it('should reject self-referential canAccess entries', () => {
