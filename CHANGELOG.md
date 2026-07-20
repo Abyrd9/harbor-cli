@@ -399,3 +399,7 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 - Update major dependencies
 - Fix after script cwd handling
 - Refresh deps and harden tmux tests
+
+## 2.5.1 - 2026-07-19
+
+- Harden Harbor config and tmux handling
