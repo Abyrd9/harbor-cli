@@ -7,9 +7,12 @@ import path from 'node:path';
 const CLI_PATH = path.join(__dirname, '..', 'dist', 'index.js');
 
 // Helper to run CLI and capture output
-function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; code: number }> {
+function runCLI(
+  args: string[],
+  cliPath = CLI_PATH,
+): Promise<{ stdout: string; stderr: string; code: number }> {
   return new Promise((resolve) => {
-    const proc = spawn('node', [CLI_PATH, ...args], {
+    const proc = spawn('node', [cliPath, ...args], {
       env: { ...process.env, NO_COLOR: '1' },
     });
     
@@ -26,6 +29,22 @@ function runCLI(args: string[]): Promise<{ stdout: string; stderr: string; code:
 }
 
 describe('CLI Commands', () => {
+  it('runs through a symlinked global binary', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-bin-'));
+    const binPath = path.join(tempDir, 'harbor');
+    fs.symlinkSync(CLI_PATH, binPath);
+
+    try {
+      const direct = await runCLI(['--version']);
+      const linked = await runCLI(['--version'], binPath);
+
+      expect(direct.stdout.trim()).not.toBe('');
+      expect(linked).toEqual(direct);
+    } finally {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
+
   describe('harbor --help', () => {
     let stdout = '';
 

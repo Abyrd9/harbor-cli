@@ -43,7 +43,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const packageRoot = resolvePackageRoot(__dirname);
 const isDirectExecution = process.argv[1]
-  ? path.resolve(process.argv[1]) === __filename
+  ? fs.realpathSync(process.argv[1]) === fs.realpathSync(__filename)
   : false;
 const packageJsonPath = path.join(packageRoot, 'package.json');
 const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf-8'));
