@@ -17,16 +17,16 @@ session_name="${HARBOR_SESSION_NAME:-$(get_harbor_config | jq -r '.sessionName /
 # Use a separate tmux socket for Harbor to avoid conflicts with existing tmux sessions
 # This prevents Harbor's global options from affecting other tmux sessions
 socket_name="harbor-${session_name}"
-tmux_cmd="tmux -L $socket_name"
+tmux_cmd=(tmux -L "$socket_name")
 
 # Replacing a running session must be explicitly requested by the CLI.
-if $tmux_cmd has-session -t "$session_name" 2>/dev/null; then
+if "${tmux_cmd[@]}" has-session -t "$session_name" 2>/dev/null; then
     if [ "${HARBOR_REPLACE:-0}" != "1" ]; then
         echo "Harbor session '$session_name' is already running" >&2
         exit 1
     fi
     echo "Replacing existing tmux session '$session_name'"
-    $tmux_cmd kill-session -t "$session_name"
+    "${tmux_cmd[@]}" kill-session -t "$session_name"
 fi
 repo_root="$(pwd)"
 max_log_lines=1000
@@ -60,82 +60,82 @@ start_log_trim() {
 trap cleanup_logs EXIT
 
 # Start a new tmux session and rename the initial window
-$tmux_cmd new-session -d -s "$session_name"
+"${tmux_cmd[@]}" new-session -d -s "$session_name"
 
-if ! $tmux_cmd has-session -t "$session_name" 2>/dev/null; then
+if ! "${tmux_cmd[@]}" has-session -t "$session_name" 2>/dev/null; then
     echo "Failed to create tmux session '$session_name'. Check tmux socket permissions." >&2
     exit 1
 fi
 
 # Set tmux options
-$tmux_cmd set-option -g prefix C-a
-$tmux_cmd bind-key C-a send-prefix
-$tmux_cmd set-option -g mouse on
-$tmux_cmd set-option -g history-limit 50000
-$tmux_cmd set-option -g remain-on-exit on
-$tmux_cmd set-window-option -g mode-keys vi
+"${tmux_cmd[@]}" set-option -g prefix C-a
+"${tmux_cmd[@]}" bind-key C-a send-prefix
+"${tmux_cmd[@]}" set-option -g mouse on
+"${tmux_cmd[@]}" set-option -g history-limit 50000
+"${tmux_cmd[@]}" set-option -g remain-on-exit on
+"${tmux_cmd[@]}" set-window-option -g mode-keys vi
 
 # Enable extended keys so modifier combinations (like Shift+Enter) pass through to applications
-$tmux_cmd set-option -g extended-keys on
-$tmux_cmd set-option -g xterm-keys on
+"${tmux_cmd[@]}" set-option -g extended-keys on
+"${tmux_cmd[@]}" set-option -g xterm-keys on
 
 # Add binding to kill session with Ctrl+q
-$tmux_cmd bind-key -n C-q kill-session
+"${tmux_cmd[@]}" bind-key -n C-q kill-session
 
 # Add padding and styling to panes
-$tmux_cmd set-option -g pane-border-style fg="#3f3f3f"
-$tmux_cmd set-option -g pane-active-border-style fg="#6366f1"
-$tmux_cmd set-option -g pane-border-status top
-$tmux_cmd set-option -g pane-border-format ""
+"${tmux_cmd[@]}" set-option -g pane-border-style fg="#3f3f3f"
+"${tmux_cmd[@]}" set-option -g pane-active-border-style fg="#6366f1"
+"${tmux_cmd[@]}" set-option -g pane-border-status top
+"${tmux_cmd[@]}" set-option -g pane-border-format ""
 
 # Add padding inside panes
-$tmux_cmd set-option -g status-left-length 100
-$tmux_cmd set-option -g status-right-length 100
-$tmux_cmd set-window-option -g window-style 'fg=colour247,bg=colour236'
-$tmux_cmd set-window-option -g window-active-style 'fg=colour250,bg=black'
+"${tmux_cmd[@]}" set-option -g status-left-length 100
+"${tmux_cmd[@]}" set-option -g status-right-length 100
+"${tmux_cmd[@]}" set-window-option -g window-style 'fg=colour247,bg=colour236'
+"${tmux_cmd[@]}" set-window-option -g window-active-style 'fg=colour250,bg=black'
 
 # Set inner padding
-$tmux_cmd set-option -g window-style "bg=#1c1917 fg=#a8a29e"
-$tmux_cmd set-option -g window-active-style "bg=#1c1917 fg=#ffffff"
+"${tmux_cmd[@]}" set-option -g window-style "bg=#1c1917 fg=#a8a29e"
+"${tmux_cmd[@]}" set-option -g window-active-style "bg=#1c1917 fg=#ffffff"
 
 # Improve copy mode and mouse behavior
-$tmux_cmd set-option -g set-clipboard external
-$tmux_cmd bind-key -T copy-mode-vi v send-keys -X begin-selection
-$tmux_cmd bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
-$tmux_cmd bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
+"${tmux_cmd[@]}" set-option -g set-clipboard external
+"${tmux_cmd[@]}" bind-key -T copy-mode-vi v send-keys -X begin-selection
+"${tmux_cmd[@]}" bind-key -T copy-mode-vi y send-keys -X copy-selection-and-cancel
+"${tmux_cmd[@]}" bind-key -T copy-mode-vi MouseDragEnd1Pane send-keys -X copy-pipe-and-cancel "pbcopy"
 
 # Set easier window navigation shortcuts (Shift+Left/Right to switch windows)
-$tmux_cmd bind-key -n S-Left select-window -t :-
-$tmux_cmd bind-key -n S-Right select-window -t :+
+"${tmux_cmd[@]}" bind-key -n S-Left select-window -t :-
+"${tmux_cmd[@]}" bind-key -n S-Right select-window -t :+
 
 # Most terminals do not emit a distinct key sequence for Ctrl+Shift+letter, so use Ctrl+t/Ctrl+w.
-$tmux_cmd bind-key -n C-t new-window -n "+Terminal"
+"${tmux_cmd[@]}" bind-key -n C-t new-window -n "+Terminal"
 
 # Add Ctrl+w to close current window ONLY if it's user-created (starts with +)
-$tmux_cmd bind-key -n C-w if-shell 'tmux display-message -p "#{window_name}" | grep -q "^+"' 'kill-window' 'display-message "Cannot close service windows (only +Terminal tabs)"'
+"${tmux_cmd[@]}" bind-key -n C-w if-shell 'tmux display-message -p "#{window_name}" | grep -q "^+"' 'kill-window' 'display-message "Cannot close service windows (only +Terminal tabs)"'
 
 # Configure status bar
-$tmux_cmd set-option -g status-position top
-$tmux_cmd set-option -g status-style bg="#1c1917",fg="#a8a29e"
-$tmux_cmd set-option -g status-left ""
-$tmux_cmd set-option -g status-right "#[fg=#57534e]ctrl+t new · ctrl+w close · shift+←/→ switch · ctrl+q quit#[fg=#78716c] · %H:%M#[default]"
-$tmux_cmd set-window-option -g window-status-current-format "\
+"${tmux_cmd[@]}" set-option -g status-position top
+"${tmux_cmd[@]}" set-option -g status-style bg="#1c1917",fg="#a8a29e"
+"${tmux_cmd[@]}" set-option -g status-left ""
+"${tmux_cmd[@]}" set-option -g status-right "#[fg=#57534e]ctrl+t new · ctrl+w close · shift+←/→ switch · ctrl+q quit#[fg=#78716c] · %H:%M#[default]"
+"${tmux_cmd[@]}" set-window-option -g window-status-current-format "\
 #[fg=#6366f1, bg=#1c1917] →\
 #[fg=#6366f1, bg=#1c1917, bold] #W\
 #[fg=#6366f1, bg=#1c1917]  "
-$tmux_cmd set-window-option -g window-status-format "\
+"${tmux_cmd[@]}" set-window-option -g window-status-format "\
 #[fg=#a8a29e, bg=#1c1917]  \
 #[fg=#a8a29e, bg=#1c1917] #W \
 #[fg=#a8a29e, bg=#1c1917] "
 
 # Add padding below status bar
-$tmux_cmd set-option -g status 2
-$tmux_cmd set-option -Fg 'status-format[1]' '#{status-format[0]}'
-$tmux_cmd set-option -g 'status-format[0]' ''
+"${tmux_cmd[@]}" set-option -g status 2
+"${tmux_cmd[@]}" set-option -Fg 'status-format[1]' '#{status-format[0]}'
+"${tmux_cmd[@]}" set-option -g 'status-format[0]' ''
 
 # Create a new window for the interactive shell
 echo "Creating window for interactive shell"
-$tmux_cmd rename-window -t "$session_name":0 'Terminal'
+"${tmux_cmd[@]}" rename-window -t "$session_name":0 'Terminal'
 
 window_index=1  # Start from index 1
 
@@ -145,12 +145,18 @@ if get_harbor_config | jq -e '.services[] | select(.log == true)' >/dev/null 2>&
 fi
 
 # Create windows dynamically based on harbor config
-while read service; do
-    name=$(echo $service | jq -r '.name')
-    path=$(echo $service | jq -r '.path')
-    command=$(echo $service | jq -r '.command')
-    log=$(echo $service | jq -r '.log // false')
-    service_max_lines=$(echo $service | jq -r '.maxLogLines // empty')
+while IFS= read -r service; do
+    name=$(jq -r '.name' <<< "$service")
+    path=$(jq -r '.path' <<< "$service")
+    command=$(jq -r '.command' <<< "$service")
+    log=$(jq -r '.log // false' <<< "$service")
+    service_max_lines=$(jq -r '.maxLogLines // empty' <<< "$service")
+
+    printf -v repo_root_quoted '%q' "$repo_root"
+    printf -v session_name_quoted '%q' "$session_name"
+    printf -v socket_name_quoted '%q' "$socket_name"
+    printf -v service_name_quoted '%q' "$name"
+    printf -v service_path_quoted '%q' "$path"
     
     # Use service-specific maxLogLines or fall back to default
     effective_max_lines="${service_max_lines:-$max_log_lines}"
@@ -160,22 +166,23 @@ while read service; do
     echo "Command: $command"
     
     # Build the environment export command for inter-pane communication
-    env_export="export HARBOR_ROOT='$repo_root' HARBOR_SESSION='$session_name' HARBOR_SOCKET='$socket_name' HARBOR_SERVICE='$name' HARBOR_WINDOW=$window_index"
+    env_export="export HARBOR_ROOT=$repo_root_quoted HARBOR_SESSION=$session_name_quoted HARBOR_SOCKET=$socket_name_quoted HARBOR_SERVICE=$service_name_quoted HARBOR_WINDOW=$window_index"
     
     if [ "$log" = "true" ]; then
         log_file="$repo_root/.harbor/${session_name}-${name}.log"
         : > "$log_file"
         # Use pipe-pane to capture ALL terminal output (works with any program, no buffering issues)
-        $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
-        $tmux_cmd pipe-pane -t "$session_name":$window_index "cat >> \"$log_file\""
+        "${tmux_cmd[@]}" new-window -t "$session_name":$window_index -n "$name"
+        printf -v log_file_quoted '%q' "$log_file"
+        "${tmux_cmd[@]}" pipe-pane -t "$session_name":$window_index "cat >> $log_file_quoted"
         # Inject environment variables then run command
-        $tmux_cmd send-keys -t "$session_name":$window_index "$env_export && cd \"$path\" && $command" C-m
+        "${tmux_cmd[@]}" send-keys -t "$session_name":$window_index "$env_export && cd $service_path_quoted && $command" C-m
         # Start background process to trim logs if they get too large
         start_log_trim "$log_file" "$effective_max_lines"
     else
-        $tmux_cmd new-window -t "$session_name":$window_index -n "$name"
+        "${tmux_cmd[@]}" new-window -t "$session_name":$window_index -n "$name"
         # Inject environment variables then run command
-        $tmux_cmd send-keys -t "$session_name":$window_index "$env_export && cd \"$path\" && $command" C-m
+        "${tmux_cmd[@]}" send-keys -t "$session_name":$window_index "$env_export && cd $service_path_quoted && $command" C-m
     fi
     
     ((window_index++))
@@ -198,9 +205,9 @@ EOF
 # Add each service to the JSON
 first_service=true
 svc_window_index=1
-while read service; do
-    name=$(echo $service | jq -r '.name')
-    can_access=$(echo $service | jq -c '.canAccess // []')
+while IFS= read -r service; do
+    name=$(jq -r '.name' <<< "$service")
+    can_access=$(jq -c '.canAccess // []' <<< "$service")
     
     if [ "$first_service" = true ]; then
         first_service=false
@@ -229,10 +236,10 @@ echo "$session_json" > "$repo_root/.harbor/session.json"
 echo "Session metadata written to .harbor/session.json"
 
 # Bind 'Home' key to switch to the terminal window
-$tmux_cmd bind-key -n Home select-window -t :0
+"${tmux_cmd[@]}" bind-key -n Home select-window -t :0
 
 # Select the terminal window
-$tmux_cmd select-window -t "$session_name":0
+"${tmux_cmd[@]}" select-window -t "$session_name":0
 
 # Attach to the tmux session (unless running in detached/headless mode)
 if [ "${HARBOR_DETACH:-0}" = "1" ]; then
@@ -252,5 +259,5 @@ if [ "${HARBOR_DETACH:-0}" = "1" ]; then
         echo ""
     fi
 else
-    $tmux_cmd attach-session -t "$session_name"
+    "${tmux_cmd[@]}" attach-session -t "$session_name"
 fi

@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import path from 'node:path';
 
-import { resolvePackageRoot, validateConfig } from '../index';
+import { validateConfig } from '../harbor-config';
+import { resolvePackageRoot } from '../index';
 
 function validateRawConfig(config: unknown) {
   return validateConfig(config as Parameters<typeof validateConfig>[0]);
@@ -11,7 +12,7 @@ describe('Configuration Validation', () => {
   it('should validate basic service config', () => {
     const config = {
       services: [
-        { name: 'test', path: './test' }
+        { name: 'test', path: './test', command: 'bun run dev' }
       ]
     };
     expect(validateConfig(config)).toBeNull();
@@ -35,17 +36,28 @@ describe('Configuration Validation', () => {
     expect(validateRawConfig(config)).toContain('path is required');
   });
 
+  it('should reject missing service command', () => {
+    const config = {
+      services: [
+        { name: 'test', path: './test' }
+      ]
+    };
+    expect(validateRawConfig(config)).toContain('command is required');
+  });
+
   it('should validate canAccess references to sibling services', () => {
     const config = {
       services: [
         {
           name: 'api',
           path: './api',
+          command: 'bun run dev',
           canAccess: ['web']
         },
         {
           name: 'web',
           path: './test',
+          command: 'bun run dev',
         }
       ]
     };
@@ -58,6 +70,7 @@ describe('Configuration Validation', () => {
         {
           name: 'api',
           path: './test',
+          command: 'bun run dev',
           canAccess: ['missing']
         }
       ]
@@ -71,6 +84,7 @@ describe('Configuration Validation', () => {
         {
           name: 'api',
           path: './test',
+          command: 'bun run dev',
           canAccess: ['api']
         }
       ]
@@ -81,7 +95,7 @@ describe('Configuration Validation', () => {
   it('should validate before scripts', () => {
     const config = {
       services: [
-        { name: 'test', path: './test' }
+        { name: 'test', path: './test', command: 'bun run dev' }
       ],
       before: [
         { path: './scripts', command: 'echo "before"' }
@@ -93,7 +107,7 @@ describe('Configuration Validation', () => {
   it('should validate after scripts', () => {
     const config = {
       services: [
-        { name: 'test', path: './test' }
+        { name: 'test', path: './test', command: 'bun run dev' }
       ],
       after: [
         { path: './scripts', command: 'echo "after"' }
@@ -105,7 +119,7 @@ describe('Configuration Validation', () => {
   it('should validate session name', () => {
     const config = {
       services: [
-        { name: 'test', path: './test' }
+        { name: 'test', path: './test', command: 'bun run dev' }
       ],
       sessionName: 'my-project'
     };

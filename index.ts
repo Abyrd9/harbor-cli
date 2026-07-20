@@ -20,7 +20,9 @@ import {
   killHarborSession,
   listHarborWindows,
   sendToHarborPane,
+  type SessionInfo,
 } from './harbor-session.js';
+import { type Config, type DevService, type Script, validateConfig } from './harbor-config.js';
 
 // Colored output helpers
 const log = {
@@ -212,27 +214,6 @@ async function checkDependencies(): Promise<void> {
   }
 }
 
-type DevService = {
-  name: string;
-  path: string;
-  command?: string;
-  log?: boolean;
-  maxLogLines?: number;
-  canAccess?: string[];
-}
-
-type Script = {
-  path: string;
-  command: string;
-}
-
-type Config = {
-  services: DevService[];
-  before?: Script[];
-  after?: Script[];
-  sessionName?: string;
-}
-
 type ConfigLocation = 'package.json' | 'harbor.json';
 
 // ─────────────────────────────────────────────────────────────
@@ -333,16 +314,18 @@ function promptConfigLocation(): Promise<ConfigLocation> {
   });
 }
 
-export const possibleProjectFiles = [
-  'package.json',     // Node.js projects
-  'go.mod',           // Go projects
-  'Cargo.toml',       // Rust projects
-  'composer.json',    // PHP projects
-  'requirements.txt', // Python projects
-  'Gemfile',          // Ruby projects
-  'pom.xml',          // Java Maven projects
-  'build.gradle',     // Java Gradle projects
-];
+const projectCommands = {
+  'package.json': 'npm run dev',
+  'go.mod': 'go run .',
+  'Cargo.toml': 'cargo run',
+  'composer.json': 'php artisan serve',
+  'requirements.txt': 'python app.py',
+  'Gemfile': 'bundle exec rails server',
+  'pom.xml': 'mvn spring-boot:run',
+  'build.gradle': './gradlew bootRun',
+};
+
+export const possibleProjectFiles = Object.keys(projectCommands);
 
 const program = new Command();
 
@@ -739,8 +722,6 @@ program.command('context')
   .description('Output session context for AI agents (markdown format)')
   .action(async () => {
     const session = await getLiveHarborSession();
-    const currentService = process.env.HARBOR_SERVICE;
-    
     if (!session) {
       console.log(`# Harbor Session
 
@@ -749,95 +730,7 @@ No active harbor session found. Run \`harbor launch\` to start one.
       process.exit(0);
     }
 
-    const currentServiceInfo = currentService ? session.services[currentService] : null;
-    const canAccessList = currentServiceInfo?.canAccess || [];
-    
-    let output = `# Harbor Session Context
-
-You are running inside a **harbor** tmux session, which orchestrates multiple development services.
-
-## Current Session
-- **Session**: ${session.session}
-- **Socket**: ${session.socket}
-- **Started**: ${session.startedAt}
-`;
-
-    if (currentService) {
-      output += `- **Your Pane**: ${currentService} (window ${currentServiceInfo?.window})
-`;
-    }
-
-    output += `
-## Available Services
-| Service | Window | You Can Access |
-|---------|--------|----------------|
-`;
-
-    for (const [name, info] of Object.entries(session.services)) {
-      const isCurrent = name === currentService;
-      const hasAccess = !currentService || canAccessList.includes(name) || name === currentService;
-      const accessIcon = isCurrent ? '(you)' : hasAccess ? '✓' : '✗';
-      output += `| ${name} | ${info.window} | ${accessIcon} |\n`;
-    }
-
-    output += `
-## Inter-Pane Communication Commands
-
-You can interact with other service panes using these commands:
-
-### \`harbor hail <service> "<command>"\`
-Send keystrokes to another pane (fire-and-forget).
-\`\`\`bash
-harbor hail repl "echo hello"
-\`\`\`
-
-### \`harbor survey <service> [--lines N]\`
-Capture the current output/scrollback from another pane.
-\`\`\`bash
-harbor survey web --lines 50
-\`\`\`
-
-### \`harbor parley <service> "<command>" [--timeout ms]\`
-Execute a command in another pane and capture the response.
-Uses markers to delimit output. Good for REPLs and CLIs.
-\`\`\`bash
-harbor parley repl "users" --timeout 3000
-\`\`\`
-
-## Access Control
-`;
-
-    if (currentService) {
-      if (canAccessList.length > 0) {
-        output += `Your service (${currentService}) can access: **${canAccessList.join(', ')}**
-
-To access other services, add them to \`canAccess\` in harbor.json and restart the session.
-`;
-      } else {
-        output += `Your service (${currentService}) has no \`canAccess\` configured.
-
-Add services to \`canAccess\` in harbor.json to enable inter-pane communication:
-\`\`\`json
-{
-  "name": "${currentService}",
-  "canAccess": ["repl", "web"]
-}
-\`\`\`
-`;
-      }
-    } else {
-      output += `You are running from outside the harbor session, so you have access to all services.
-`;
-    }
-
-    output += `
-## Other Useful Commands
-- \`harbor bearings\` - Show session status and running services
-- \`harbor anchor\` - Attach to the tmux session interactively
-- \`harbor scuttle\` - Stop all services
-`;
-
-    console.log(output);
+    console.log(_formatSessionContext(session, process.env.HARBOR_SERVICE));
   });
 
 if (isDirectExecution) {
@@ -856,71 +749,6 @@ export function isProjectDirectory(dirPath: string): boolean {
       return false;
     }
   });
-}
-
-export function validateConfig(config: Config): string | null {
-  if (!Array.isArray(config.services)) {
-    return 'Services must be an array';
-  }
-
-  const serviceNames = new Set(config.services.map(s => s.name));
-
-  for (const service of config.services) {
-    if (!service.name) {
-      return 'Service name is required';
-    }
-    if (!service.path) {
-      return 'Service path is required';
-    }
-    
-    // Validate canAccess references
-    if (service.canAccess) {
-      for (const targetName of service.canAccess) {
-        if (!serviceNames.has(targetName)) {
-          return `Service "${service.name}" has canAccess reference to unknown service "${targetName}"`;
-        }
-        if (targetName === service.name) {
-          return `Service "${service.name}" cannot have canAccess reference to itself`;
-        }
-      }
-    }
-  }
-
-  // Validate before scripts
-  if (config.before && !Array.isArray(config.before)) {
-    return 'Before scripts must be an array';
-  }
-
-  if (config.before) {
-    for (let i = 0; i < config.before.length; i++) {
-      const script = config.before[i];
-      if (!script.path) {
-        return `Before script ${i} must have a path`;
-      }
-      if (!script.command) {
-        return `Before script ${i} must have a command`;
-      }
-    }
-  }
-
-  // Validate after scripts
-  if (config.after && !Array.isArray(config.after)) {
-    return 'After scripts must be an array';
-  }
-
-  if (config.after) {
-    for (let i = 0; i < config.after.length; i++) {
-      const script = config.after[i];
-      if (!script.path) {
-        return `After script ${i} must have a path`;
-      }
-      if (!script.command) {
-        return `After script ${i} must have a command`;
-      }
-    }
-  }
-
-  return null;
 }
 
 async function generateDevFile(dirPath: string): Promise<boolean> {
@@ -980,27 +808,24 @@ async function generateDevFile(dirPath: string): Promise<boolean> {
     for (const folder of folders) {
       if (folder.isDirectory()) {
         const folderPath = path.join(dirPath, folder.name);
+        const command = Object.entries(projectCommands).find(([file]) => (
+          fs.existsSync(path.join(folderPath, file))
+        ))?.[1];
         
         // Only add directories that contain project files and aren't already in config
-        if (isProjectDirectory(folderPath) && !existing.has(folder.name)) {
+        if (command && !existing.has(folder.name)) {
           const service: DevService = {
             name: folder.name,
             path: folderPath,
+            command,
           };
-
-          // Try to determine default command based on project type
-          if (fs.existsSync(path.join(folderPath, 'package.json'))) {
-            service.command = 'npm run dev';
-          } else if (fs.existsSync(path.join(folderPath, 'go.mod'))) {
-            service.command = 'go run .';
-          }
 
           config.services.push(service);
           log.success(`Added service: ${pc.green(folder.name)}`);
           newServicesAdded = true;
         } else if (existing.has(folder.name)) {
           log.dim(`  Skipping existing service: ${folder.name}`);
-        } else {
+        } else if (!command) {
           log.dim(`  Skipping directory ${folder.name} (no recognized project files)`);
         }
       }
@@ -1314,4 +1139,91 @@ export function resolvePackageRoot(entryDir: string): string {
   return fs.existsSync(path.join(entryDir, 'package.json'))
     ? entryDir
     : path.join(entryDir, '..');
+}
+
+function _formatSessionContext(session: SessionInfo, currentService?: string): string {
+  const currentServiceInfo = currentService ? session.services[currentService] : null;
+  const canAccessList = currentServiceInfo?.canAccess || [];
+  let output = `# Harbor Session Context
+
+You are running inside a **harbor** tmux session, which orchestrates multiple development services.
+
+## Current Session
+- **Session**: ${session.session}
+- **Socket**: ${session.socket}
+- **Started**: ${session.startedAt}
+`;
+
+  if (currentService) {
+    output += `- **Your Pane**: ${currentService} (window ${currentServiceInfo?.window})
+`;
+  }
+
+  output += `
+## Available Services
+| Service | Window | You Can Access |
+|---------|--------|----------------|
+`;
+
+  for (const [name, info] of Object.entries(session.services)) {
+    const isCurrent = name === currentService;
+    const hasAccess = !currentService || canAccessList.includes(name) || name === currentService;
+    const accessIcon = isCurrent ? '(you)' : hasAccess ? '✓' : '✗';
+    output += `| ${name} | ${info.window} | ${accessIcon} |\n`;
+  }
+
+  output += `
+## Inter-Pane Communication Commands
+
+You can interact with other service panes using these commands:
+
+### \`harbor hail <service> "<command>"\`
+Send keystrokes to another pane (fire-and-forget).
+\`\`\`bash
+harbor hail repl "echo hello"
+\`\`\`
+
+### \`harbor survey <service> [--lines N]\`
+Capture the current output/scrollback from another pane.
+\`\`\`bash
+harbor survey web --lines 50
+\`\`\`
+
+### \`harbor parley <service> "<command>" [--timeout ms]\`
+Execute a command in another pane and capture the response.
+Uses markers to delimit output. Good for REPLs and CLIs.
+\`\`\`bash
+harbor parley repl "users" --timeout 3000
+\`\`\`
+
+## Access Control
+`;
+
+  if (currentService && canAccessList.length > 0) {
+    output += `Your service (${currentService}) can access: **${canAccessList.join(', ')}**
+
+To access other services, add them to \`canAccess\` in harbor.json and restart the session.
+`;
+  } else if (currentService) {
+    output += `Your service (${currentService}) has no \`canAccess\` configured.
+
+Add services to \`canAccess\` in harbor.json to enable inter-pane communication:
+\`\`\`json
+{
+  "name": "${currentService}",
+  "canAccess": ["repl", "web"]
+}
+\`\`\`
+`;
+  } else {
+    output += `You are running from outside the harbor session, so you have access to all services.
+`;
+  }
+
+  return `${output}
+## Other Useful Commands
+- \`harbor bearings\` - Show session status and running services
+- \`harbor anchor\` - Attach to the tmux session interactively
+- \`harbor scuttle\` - Stop all services
+`;
 }

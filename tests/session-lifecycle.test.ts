@@ -163,6 +163,35 @@ describe('Session lifecycle', () => {
     expect(result.stdout).not.toContain('stale-session');
   });
 
+  it('stops waiting when tmux hangs', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-tmux-timeout-'));
+    const harborDir = path.join(tempDir, '.harbor');
+    const binDir = path.join(tempDir, 'bin');
+    tempDirs.push(tempDir);
+    fs.mkdirSync(harborDir);
+    fs.mkdirSync(binDir);
+    fs.writeFileSync(path.join(binDir, 'tmux'), '#!/bin/bash\nexec sleep 5\n');
+    fs.chmodSync(path.join(binDir, 'tmux'), 0o755);
+    fs.writeFileSync(
+      path.join(harborDir, 'session.json'),
+      JSON.stringify({
+        session: 'stuck-session',
+        socket: 'harbor-stuck-session',
+        startedAt: '2026-07-01T00:00:00Z',
+        services: {},
+      })
+    );
+
+    const result = await runCLI(['context'], {
+      cwd: tempDir,
+      env: { PATH: `${binDir}:${process.env.PATH}` },
+      timeout: 4500,
+    });
+
+    expect(result.code).toBe(0);
+    expect(result.stdout).toContain('No active harbor session found');
+  }, 7000);
+
   it('exports the Harbor project root to launched service panes', async () => {
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-root-env-'));
     const sessionName = `harbor-root-${process.pid}-${Date.now()}`;
@@ -180,8 +209,30 @@ describe('Session lifecycle', () => {
 
     expect(result.code, result.stderr || result.stdout).toBe(0);
     expect(fs.readFileSync(tmux.logPath, 'utf-8')).toContain(
-      `HARBOR_ROOT='${fs.realpathSync(tempDir)}'`
+      `HARBOR_ROOT=${fs.realpathSync(tempDir)}`
     );
+  });
+
+  it('quotes service metadata before sending it to a pane', async () => {
+    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'harbor-shell-quote-'));
+    const serviceName = "worker's app";
+    const serviceDir = path.join(tempDir, serviceName);
+    tempDirs.push(tempDir);
+    fs.mkdirSync(serviceDir);
+    const tmux = createFakeTmux(tempDir);
+    fs.writeFileSync(
+      path.join(tempDir, 'harbor.json'),
+      JSON.stringify({
+        services: [{ name: serviceName, path: serviceDir, command: 'sleep 30' }],
+      })
+    );
+
+    const result = await runCLI(['launch', '-d'], { cwd: tempDir, env: tmux.env });
+
+    expect(result.code, result.stderr || result.stdout).toBe(0);
+    const tmuxLog = fs.readFileSync(tmux.logPath, 'utf-8');
+    expect(tmuxLog).toContain("HARBOR_SERVICE=worker\\'s\\ app");
+    expect(tmuxLog).toContain(`cd ${serviceDir.replaceAll("'", "\\'").replaceAll(' ', '\\ ')}`);
   });
 
   it('resolves the live session from a service working directory', async () => {

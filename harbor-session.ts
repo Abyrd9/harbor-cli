@@ -23,13 +23,10 @@ export type HarborWindow = {
 
 /** Check the real tmux socket rather than trusting cached Harbor metadata. */
 export function harborSessionExists(sessionName: string, socketName: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const process = spawn('tmux', ['-L', socketName, 'has-session', '-t', sessionName], {
-      stdio: 'pipe',
-    });
-    process.on('error', () => resolve(false));
-    process.on('close', (code) => resolve(code === 0));
-  });
+  return runTmux(['-L', socketName, 'has-session', '-t', sessionName]).then(
+    () => true,
+    () => false
+  );
 }
 
 /** Detect the target Harbor session from pane metadata or tmux's socket path. */
@@ -75,15 +72,24 @@ export async function getLiveHarborSession(startDir = process.cwd()): Promise<Se
   }
 }
 
-function runTmux(args: string[]): Promise<string> {
+function runTmux(args: string[], timeout = 3000): Promise<string> {
   return new Promise((resolve, reject) => {
     const process = spawn('tmux', args, { stdio: ['ignore', 'pipe', 'pipe'] });
     let stdout = '';
     let stderr = '';
+    const timer = setTimeout(() => {
+      process.kill();
+      reject(new Error(`tmux timed out after ${timeout}ms`));
+    }, timeout);
+
     process.stdout.on('data', (data) => { stdout += data.toString(); });
     process.stderr.on('data', (data) => { stderr += data.toString(); });
-    process.on('error', reject);
+    process.on('error', (error) => {
+      clearTimeout(timer);
+      reject(error);
+    });
     process.on('close', (code) => {
+      clearTimeout(timer);
       if (code === 0) {
         resolve(stdout);
       } else {

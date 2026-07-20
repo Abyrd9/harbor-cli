@@ -15,7 +15,7 @@
       "description": "List of development services to run",
       "items": {
         "type": "object",
-        "required": ["name", "path"],
+        "required": ["name", "path", "command"],
         "properties": {
           "name": {
             "type": "string",
