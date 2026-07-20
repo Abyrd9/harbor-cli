@@ -408,3 +408,7 @@ Adding helpful tips to install TMUX and JQ if they are not yet installed when us
 
 - Fix global Harbor entrypoint
 - Harden config validation
+
+## 2.5.3 - 2026-07-20
+
+- Restore idle service panes
